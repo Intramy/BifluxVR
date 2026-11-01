@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=BifluxVR
+GenericName=VR Game Launcher
+Comment=Play Windows VR games on Linux
+Exec=bifluxvr
+Icon=io.github.intramy.BifluxVR
+Terminal=false
+Categories=Game;Utility;GTK;
+Keywords=VR;OpenXR;OpenVR;SteamVR;Proton;WiVRn;Monado;Quest;
+StartupNotify=true

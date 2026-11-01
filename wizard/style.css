@@ -1,0 +1,202 @@
+/* BifluxVR Setup — same palette as the app: blue → indigo → purple */
+
+window.bifluxvr-setup {
+  font-family: "Inter Variable", "Inter", "SF Pro Display", "SF Pro Text", "Cantarell", sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+
+/* ---------- sidebar ---------- */
+
+.setup-sidebar {
+  padding: 32px 22px 22px 26px;
+  color: white;
+  background-image:
+    radial-gradient(circle at 15% 0%, alpha(white, 0.18), transparent 45%),
+    linear-gradient(165deg, #0a84ff 0%, #5e5ce6 52%, #bf5af2 100%);
+}
+
+.brand {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+}
+
+.brand-sub {
+  font-size: 15px;
+  opacity: 0.75;
+}
+
+.step {
+  padding: 8px 10px;
+  border-radius: 12px;
+  transition: background 200ms ease;
+}
+
+.step-num {
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 13px;
+  background: alpha(white, 0.16);
+}
+
+.step-title {
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.step.current {
+  background: alpha(white, 0.18);
+}
+
+.step.current .step-num {
+  background: white;
+  color: #5e5ce6;
+}
+
+.step.current .step-title,
+.step.done .step-title {
+  opacity: 1;
+}
+
+.step.done .step-num {
+  background: alpha(#30d158, 0.95);
+}
+
+.made-by {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* ---------- pages ---------- */
+
+.page-title {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+}
+
+.page-subtitle {
+  font-size: 15px;
+  opacity: 0.65;
+}
+
+.hero-icon {
+  -gtk-icon-shadow: 0 18px 40px alpha(#5e5ce6, 0.45);
+}
+
+.hero-title {
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -1px;
+}
+
+.hero-sub {
+  font-size: 16px;
+  opacity: 0.65;
+}
+
+.scan-pill {
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: alpha(currentColor, 0.07);
+}
+
+.scan-pill.ok {
+  background: alpha(#30d158, 0.16);
+  color: #30d158;
+  font-weight: 600;
+}
+
+.report-card {
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: alpha(currentColor, 0.05);
+}
+
+.report-preview {
+  font-family: monospace;
+  font-size: 13px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: alpha(#5e5ce6, 0.14);
+}
+
+/* ---------- plan ---------- */
+
+.badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.badge-install { background: alpha(#0a84ff, 0.18); color: #0a84ff; }
+.badge-update  { background: alpha(#bf5af2, 0.18); color: #bf5af2; }
+.badge-skip    { background: alpha(#30d158, 0.16); color: #30d158; }
+.badge-fail    { background: alpha(#ff453a, 0.16); color: #ff453a; }
+
+/* ---------- installing ---------- */
+
+.current-task {
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: alpha(currentColor, 0.05);
+}
+
+.current-text {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.setup-progress trough,
+.setup-progress progress {
+  min-height: 10px;
+  border-radius: 999px;
+}
+
+.setup-progress progress {
+  background-image: linear-gradient(90deg, #0a84ff, #5e5ce6, #bf5af2);
+}
+
+.result-card {
+  padding: 16px 18px;
+  border-radius: 14px;
+}
+
+.result-card.ok  { background: alpha(#30d158, 0.14); }
+.result-card.bad { background: alpha(#ff453a, 0.12); }
+
+.result-title {
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.log-view {
+  font-size: 12px;
+  border-radius: 12px;
+}
+
+.log-expander title {
+  font-weight: 600;
+}
+
+/* ---------- settings ---------- */
+
+.voice-preview {
+  font-size: 13px;
+  opacity: 0.65;
+  margin: -6px 4px 0 4px;
+}
+
+.launch-button {
+  padding: 12px 34px;
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+  background-image: linear-gradient(135deg, #0a84ff 0%, #5e5ce6 55%, #bf5af2 100%);
+  box-shadow: 0 14px 32px -12px alpha(#5e5ce6, 0.7);
+}
+
+.nav-bar {
+  border-top: 1px solid alpha(currentColor, 0.08);
+}

@@ -1,0 +1,423 @@
+/* BifluxVR — Apple-inspired styling layered on libadwaita */
+
+window.bifluxvr {
+  font-family: "Inter Variable", "Inter", "SF Pro Display", "SF Pro Text", "Cantarell", sans-serif;
+  font-feature-settings: "cv11", "ss01";
+}
+
+.large-title {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+}
+
+.page-subtitle {
+  font-size: 15px;
+  opacity: 0.6;
+}
+
+.section-title {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.caption-text {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+/* ---------- sidebar ---------- */
+
+.navigation-sidebar row {
+  border-radius: 10px;
+  padding: 7px 10px;
+  margin: 1px 8px;
+}
+
+.navigation-sidebar row image {
+  color: var(--accent-color);
+}
+
+.navigation-sidebar row:selected image {
+  color: inherit;
+}
+
+.sidebar-status {
+  margin: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.sidebar-status .title {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* ---------- status dots ---------- */
+
+.dot {
+  min-width: 9px;
+  min-height: 9px;
+  border-radius: 999px;
+}
+.dot.ok   { background: #30d158; box-shadow: 0 0 8px alpha(#30d158, 0.6); }
+.dot.warn { background: #ff9f0a; box-shadow: 0 0 8px alpha(#ff9f0a, 0.5); }
+.dot.fail { background: #ff453a; box-shadow: 0 0 8px alpha(#ff453a, 0.5); }
+.dot.info { background: #8e8e93; }
+
+/* ---------- hero ---------- */
+
+.hero-card {
+  border-radius: 26px;
+  padding: 30px 32px;
+  color: white;
+  background-image:
+    radial-gradient(circle at 85% 15%, alpha(white, 0.28), transparent 45%),
+    linear-gradient(135deg, #0a84ff 0%, #5e5ce6 55%, #bf5af2 100%);
+  box-shadow: 0 18px 40px -12px alpha(#5e5ce6, 0.55);
+}
+
+.hero-card.attention {
+  background-image:
+    radial-gradient(circle at 85% 15%, alpha(white, 0.3), transparent 45%),
+    linear-gradient(135deg, #ff9f0a 0%, #ff6b3d 50%, #ff375f 100%);
+  box-shadow: 0 18px 40px -12px alpha(#ff375f, 0.5);
+}
+
+.hero-card.live {
+  background-image:
+    radial-gradient(circle at 85% 15%, alpha(white, 0.28), transparent 45%),
+    linear-gradient(135deg, #30d158 0%, #0fb5ae 50%, #0a84ff 100%);
+  box-shadow: 0 18px 40px -12px alpha(#0fb5ae, 0.55);
+}
+
+.hero-eyebrow {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+  opacity: 0.85;
+}
+
+.hero-title {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+}
+
+.hero-body {
+  font-size: 15px;
+  opacity: 0.92;
+}
+
+.hero-card .hero-glyph {
+  color: alpha(white, 0.9);
+  -gtk-icon-shadow: 0 6px 20px alpha(black, 0.25);
+}
+
+button.pill.light {
+  background: white;
+  color: #1d1d1f;
+  font-weight: 700;
+  box-shadow: 0 4px 14px alpha(black, 0.15);
+}
+button.pill.light:hover { background: alpha(white, 0.9); }
+
+button.pill.glass {
+  background: alpha(white, 0.2);
+  color: white;
+  font-weight: 600;
+}
+button.pill.glass:hover { background: alpha(white, 0.3); }
+
+/* ---------- pipeline tiles ---------- */
+
+.tile {
+  background: var(--card-bg-color);
+  border-radius: 20px;
+  padding: 18px;
+  box-shadow: 0 1px 2px alpha(black, 0.06), 0 0 0 1px alpha(black, 0.05), 0 8px 24px -10px alpha(black, 0.12);
+}
+
+.tile .step {
+  font-size: 11px;
+  font-weight: 800;
+  min-width: 22px;
+  min-height: 22px;
+  border-radius: 999px;
+  background: alpha(var(--accent-color), 0.15);
+  color: var(--accent-color);
+}
+
+.tile .tile-icon {
+  color: var(--accent-color);
+}
+
+.tile .tile-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.tile .tile-value {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+flowboxchild.tile-child,
+flowboxchild.card-child {
+  padding: 0;
+  background: none;
+  outline: none;
+}
+
+/* ---------- library ---------- */
+
+.game-card {
+  padding: 6px;
+  border-radius: 18px;
+  background: none;
+  box-shadow: none;
+}
+.game-card:hover { background: alpha(currentColor, 0.05); }
+
+.poster {
+  border-radius: 14px;
+  background: alpha(currentColor, 0.08);
+  box-shadow: 0 8px 20px -8px alpha(black, 0.45);
+  transition: transform 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2), box-shadow 220ms ease;
+}
+.game-card:hover .poster {
+  transform: translateY(-3px) scale(1.025);
+  box-shadow: 0 16px 30px -10px alpha(black, 0.5);
+}
+
+.poster-fallback {
+  background-image: linear-gradient(160deg, #5e5ce6, #bf5af2);
+  color: white;
+}
+.poster-fallback .initial {
+  font-size: 56px;
+  font-weight: 800;
+  letter-spacing: -2px;
+}
+
+.game-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: white;
+  background: alpha(black, 0.55);
+}
+.badge.openxr { background: alpha(#0a84ff, 0.92); }
+.badge.openvr { background: alpha(#5e5ce6, 0.92); }
+.badge.oculus { background: alpha(#ff9f0a, 0.92); }
+.badge.blocked { background: alpha(#ff453a, 0.92); }
+
+/* ---------- game detail ---------- */
+
+.hero-image {
+  border-radius: 24px;
+  background-image: linear-gradient(135deg, #1c1c1e, #3a3a3c);
+  box-shadow: 0 20px 40px -18px alpha(black, 0.6);
+}
+
+.hero-scrim {
+  background-image: linear-gradient(to bottom, transparent 40%, alpha(black, 0.75));
+}
+
+.detail-title {
+  color: white;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  text-shadow: 0 2px 12px alpha(black, 0.5);
+}
+
+.play-button {
+  padding: 10px 28px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.mono {
+  font-family: "SF Mono", "JetBrains Mono", "Fira Code", monospace;
+  font-size: 12px;
+}
+
+.empty-glyph {
+  color: alpha(currentColor, 0.3);
+}
+
+/* ---------- drop folder ---------- */
+
+.dropzone {
+  border: 2px dashed alpha(currentColor, 0.2);
+  border-radius: 26px;
+  background: alpha(currentColor, 0.025);
+  transition: all 200ms ease;
+}
+.dropzone.hover {
+  border-color: var(--accent-color);
+  background: alpha(var(--accent-color), 0.08);
+}
+.dropzone .drop-glyph { color: var(--accent-color); }
+.drop-title {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+/* ---------- discord ---------- */
+
+@keyframes discord-sweep {
+  from { background-position: -140px 0; }
+  to { background-position: 260px 0; }
+}
+button.pill.discord {
+  color: white;
+  font-weight: 700;
+  padding: 8px 12px;
+  background-color: #5865f2;
+  background-image: linear-gradient(105deg, transparent 30%, alpha(white, 0.5) 50%, transparent 70%);
+  background-size: 120px 100%;
+  background-repeat: no-repeat;
+  background-position: -140px 0;
+  box-shadow: 0 2px 12px alpha(#5865f2, 0.5);
+}
+button.pill.discord:hover { background-color: #6b77f5; animation: discord-sweep 1.2s ease-in-out; }
+button.pill.discord:active { background-color: #4752c4; }
+button.pill.discord.shine { animation: discord-sweep 1.2s ease-in-out; }
+
+/* ---------- donate ---------- */
+
+.donate-card {
+  background: var(--card-bg-color);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 1px 2px alpha(black, 0.06), 0 0 0 1px alpha(black, 0.05), 0 10px 30px -12px alpha(black, 0.15);
+}
+.donate-emoji {
+  font-size: 34px;
+  min-width: 64px;
+  min-height: 64px;
+  border-radius: 18px;
+}
+.donate-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.donate-amount {
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: -1.5px;
+}
+.donate-goal { font-size: 16px; font-weight: 700; }
+.donate-goal-bar trough, .donate-goal-bar progress { min-height: 10px; border-radius: 5px; }
+.donate-goal-bar progress { background: #30d158; }
+.donate-card scale marks { font-size: 11px; opacity: 0.6; }
+button.pill.donate {
+  color: white;
+  font-weight: 700;
+}
+
+.tier-cigarette .donate-emoji   { background: alpha(#ff9500, 0.15); }
+.tier-cigarette .donate-amount  { color: #e8850c; }
+.tier-cigarette scale highlight { background: #ff9500; }
+.tier-cigarette button.donate   { background: #e8850c; }
+.tier-cigarette button.donate:hover { background: #f5930f; }
+
+.tier-energy .donate-emoji   { background: alpha(#30d158, 0.15); }
+.tier-energy .donate-amount  { color: #1f9d55; }
+.tier-energy scale highlight { background: #30d158; }
+.tier-energy button.donate   { background: #1f9d55; }
+.tier-energy button.donate:hover { background: #25ad5f; }
+
+.tier-support .donate-emoji   { background: alpha(#bf5af2, 0.15); }
+.tier-support .donate-amount  { color: #9b51e0; }
+.tier-support scale highlight { background: #bf5af2; }
+.tier-support button.donate   { background: #9b51e0; }
+.tier-support button.donate:hover { background: #a960ea; }
+
+.tier-updates .donate-emoji   { background: alpha(#0a84ff, 0.15); }
+.tier-updates .donate-currency { color: #0a6fd6; font-size: 20px; font-weight: 800; }
+.tier-updates button.donate   { background: #0a6fd6; }
+.tier-updates button.donate:hover { background: #1a7fe6; }
+.tier-updates button.donate-chip { padding: 4px 14px; }
+
+/* ---------- ratings, stats, notifications ---------- */
+
+.tier-badge {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: white;
+  background: alpha(black, 0.55);
+}
+.tier-badge.tier-platinum { background: #6f8aa6; }
+.tier-badge.tier-gold     { background: #c9a227; }
+.tier-badge.tier-silver   { background: #a1a1a6; }
+.tier-badge.tier-bronze   { background: #a8683a; }
+.tier-badge.tier-borked   { background: #d70015; }
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+}
+
+menubutton.unread > button {
+  color: var(--accent-color);
+}
+menubutton.unread > button image {
+  -gtk-icon-shadow: 0 0 6px alpha(currentColor, 0.5);
+}
+
+.notice-list {
+  background: none;
+}
+
+/* ---------- first-start welcome ---------- */
+
+.welcome-icon {
+  -gtk-icon-shadow: 0 14px 32px alpha(#5e5ce6, 0.45);
+}
+
+.welcome-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.welcome-by {
+  font-weight: 600;
+  color: #bf5af2;
+}
+
+.welcome-text {
+  font-size: 15px;
+  opacity: 0.8;
+}
+
+/* ---------- frame-rate estimate ---------- */
+
+.fps-badge {
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.fps-ok   { background: alpha(#30d158, 0.18); color: #30d158; }
+.fps-warn { background: alpha(#ff9f0a, 0.18); color: #ff9f0a; }
+.fps-fail { background: alpha(#ff453a, 0.18); color: #ff453a; }
