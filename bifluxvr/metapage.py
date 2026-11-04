@@ -1,7 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""The Meta page: PC games bought on Meta's store, with what their files say
-about running on Linux, and a download into the library."""
-
 import os
 import threading
 import time
@@ -29,7 +25,7 @@ def explain(kind, gb):
         meta.DRM: t(f"Checks ownership through the Meta app, which can't run on Linux. It probably won't start · {gb:.1f} GB",
                     f"Asks the Meta app if you own it, and that app doesn't do Linux. Probably won't start · {gb:.1f} GB"),
         meta.OCULUS: t(f"Built on Meta's old Rift SDK. Nothing on Linux can run that yet · {gb:.1f} GB",
-                       f"Uses Meta's old Rift SDK, and Linux has nothing that speaks it. Sorry · {gb:.1f} GB"),
+                       f"Uses Meta's old Rift SDK, and Linux has nothing that speaks it · {gb:.1f} GB"),
         meta.UNKNOWN: t(f"No VR runtime found in its files. Might be a flat game · {gb:.1f} GB",
                         f"Couldn't spot any VR bits in it. Maybe it's flat? · {gb:.1f} GB"),
     }[kind]
@@ -40,7 +36,7 @@ class MetaPage(Adw.PreferencesPage):
         super().__init__()
         self.win = win
         self.loaded = False
-        self.jobs = {}  # app id → {"cancel", "done", "total", "row"}
+        self.jobs = {}
         head = Adw.PreferencesGroup()
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         box.append(label(t("Meta Library", "Meta Stash"), "large-title"))
@@ -128,7 +124,6 @@ class MetaPage(Adw.PreferencesPage):
                       lambda e, row=row: row.set_subtitle(escape(str(e))))
         self._set(self.games, "games", rows)
 
-    # -- one game
 
     def _record(self, g):
         return self.win.cfg.get("meta_games", {}).get(g["id"])
@@ -157,7 +152,7 @@ class MetaPage(Adw.PreferencesPage):
             if kind not in (meta.DRM, meta.OCULUS):
                 badge = label(t("Installed", "In The Pile"), "caption", "success")
                 badge.set_valign(Gtk.Align.CENTER)
-            acts.append(button(t("Show", "Show Me"), cb=lambda: self.show_game(rec)))
+            acts.append(button(t("Show", "Show"), cb=lambda: self.show_game(rec)))
         else:
             if installed:
                 text = t("Update", "Update")
@@ -210,7 +205,7 @@ class MetaPage(Adw.PreferencesPage):
 
     def _progress_text(self, job):
         if not job["total"]:
-            return t("Starting…", "Warming up…")
+            return t("Starting…", "Starting…")
         pct = job["done"] * 100 // job["total"]
         return t(f"Downloading {pct}% · {job['done'] / 1e9:.1f} of {job['total'] / 1e9:.1f} GB",
                  f"Downloading {pct}% · {job['done'] / 1e9:.1f} of {job['total'] / 1e9:.1f} GB")
@@ -242,10 +237,10 @@ class MetaPage(Adw.PreferencesPage):
             self._failed(e)
             return
         self.win.toast(str(e) if isinstance(e, meta.Stopped) else
-                       t(f"{g['name']} download failed: {e}", f"{g['name']} download faceplanted: {e}"))
+                       t(f"{g['name']} download failed: {e}", f"{g['name']} download failed: {e}"))
         if not isinstance(e, meta.Stopped):
-            self._notify(g["id"], t(f"{g['name']} download failed", f"{g['name']} download faceplanted"),
-                         t(f"{e}. Press Resume to continue where it stopped.", f"{e}. Hit Keep Going to pick it back up."))
+            self._notify(g["id"], t(f"{g['name']} download failed", f"{g['name']} download failed"),
+                         t(f"{e}. Press Resume to continue where it stopped.", f"{e}. Press Keep Going to pick it back up."))
         if job:
             self._fill(job["row"], job["row"].manifest)
 
@@ -262,7 +257,7 @@ class MetaPage(Adw.PreferencesPage):
         config.save(cfg)
         self.win.toast(t(f"{g['name']} is in your library", f"{g['name']} landed in The Pile"))
         self._notify(g["id"], t(f"{g['name']} is ready", f"{g['name']} is ready"),
-                     t("Downloaded and added to your library.", "Downloaded and sitting in The Pile. Go play."))
+                     t("Downloaded and added to your library.", "Downloaded. It's in The Pile."))
         self.win.library.reload()
         if job:
             self._fill(job["row"], job["row"].manifest)
@@ -274,14 +269,13 @@ class MetaPage(Adw.PreferencesPage):
         if game:
             self.win.library.open_game(game)
 
-    # -- account
 
     def sign_in(self):
         steps = label(t("1. Press Open Meta and log in there.\n"
                         "2. Press F12 and open Storage (Firefox) or Application (Chrome), then Cookies.\n"
                         "3. Pick secure.oculus.com and copy the value of oc_ac_at. It starts with OC.\n"
                         "4. Paste it below.",
-                        "1. Hit Open Meta and log in.\n"
+                        "1. Press Open Meta and log in.\n"
                         "2. F12, then Storage (Firefox) or Application (Chrome), then Cookies.\n"
                         "3. Pick secure.oculus.com, copy the oc_ac_at value. Starts with OC.\n"
                         "4. Paste it here."), "caption-text", wrap=True)
@@ -296,10 +290,10 @@ class MetaPage(Adw.PreferencesPage):
         box.append(opener)
         box.append(lst)
         box.append(label(t("Treat it like a password: anyone with it can act as your Meta account.",
-                           "Guard it like a password. Whoever has it is you, as far as Meta cares."),
+                           "Treat it like a password. Whoever has it can act as you on Meta."),
                          "caption-text", "warning", wrap=True))
         alert = Adw.AlertDialog(heading=t("Sign In to Meta", "Sign in to Meta"), extra_child=box)
-        alert.add_response("cancel", t("Cancel", "Nevermind"))
+        alert.add_response("cancel", t("Cancel", "Cancel"))
         alert.add_response("save", t("Sign In", "Sign In"))
         alert.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
         alert.set_default_response("save")

@@ -1,4 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
 import os
 import shutil
 import sys
@@ -10,30 +9,27 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
-from . import (__version__, anticheat, audio, compat, config, donate, health, installer, launcher, mods, openvr,  # noqa: E402
-               runtimes, selfupdate, sessions, steam, updates)
-from .metapage import MetaPage  # noqa: E402
-from .pages import HeadsetPage, StatsPage, data_paths  # noqa: E402
-from .panels import (ControlsGroup, HealthGroup, ModsGroup, UpdateGroup, perf_row, protondb_row,  # noqa: E402
+from . import (__version__, anticheat, audio, compat, config, donate, health, launcher, mods, openvr,
+               runtimes, selfupdate, sessions, steam, uninstall, updates)
+from .metapage import MetaPage
+from .pages import HeadsetPage, StatsPage, data_paths
+from .panels import (ControlsGroup, HealthGroup, ModsGroup, UpdateGroup, perf_row, protondb_row,
                      rating_row, store_row)
-from .util import LOG_DIR  # noqa: E402
-from .voice import t  # noqa: E402
-from . import voice  # noqa: E402
-from .widgets import (STATE_ICONS, DynamicPrefs, ago, button, clear, dot, duration, label,  # noqa: E402
+from .util import LOG_DIR
+from .voice import t
+from . import voice
+from .widgets import (STATE_ICONS, DynamicPrefs, ago, button, clear, dot, duration, label,
                       load_texture, run_async, scrolled)
+from .yeet import YeetPage
 
 APP_ID = "io.github.intramy.BifluxVR"
 HERE = os.path.dirname(os.path.abspath(__file__))
 DISCORD_URL = "https://discord.gg/U9XQ9eeGkx"
 
 
-# -------------------------------------------------------------------- state
-
 class State:
-    """A snapshot of the whole VR stack, gathered off the main thread."""
-
     def __init__(self):
         self.checks = health.run_all()
         self.runtimes = runtimes.discover()
@@ -61,13 +57,12 @@ class State:
 
 
 def perform_fix(check):
-    """Carry out a health check's one-click fix. Runs on a worker thread."""
     if check.id == "openxr":
         usable = [r for r in runtimes.discover() if r.valid and r.kind != "steamvr"]
         if not usable:
-            raise RuntimeError(t("No OpenXR runtime is installed", "There's no OpenXR runtime installed. At all."))
+            raise RuntimeError(t("No OpenXR runtime is installed", "There's no OpenXR runtime installed."))
         runtimes.set_active(usable[0].manifest)
-        return t(f"{usable[0].name} is now your OpenXR runtime", f"{usable[0].name} is in charge now")
+        return t(f"{usable[0].name} is now your OpenXR runtime", f"{usable[0].name} is your runtime now")
     if check.id == "openvr":
         layers = openvr.discover()
         pick = [l for l in layers if l.kind == "xrizer"] or [l for l in layers if l.kind == "opencomposite"]
@@ -83,8 +78,6 @@ def perform_fix(check):
 
 
 def load_library(cfg):
-    """Returns (games, {custom id: Steam app ID}) with the Steam matches found
-    for non-Steam games, which the caller saves. Runs on a worker thread."""
     games = steam.scan_games()
     played = steam.playtimes()
     for g in games:
@@ -100,22 +93,24 @@ def load_library(cfg):
         store_id = c.get("store_id", "")
         if online:
             try:
-                if not store_id and not c.get("store_id_manual"):
+                if c.get("kind") == "app":
+                    pass
+                elif not store_id and not c.get("store_id_manual"):
                     store_id = matches[c["id"]] = compat.store_match(c["name"])
-                if store_id:
+                if store_id and c.get("kind") != "app":
                     compat.fetch_art(store_id, ("library_600x900", "library_hero", "logo"))
             except OSError:
                 pass
         key = f"custom:{c['id']}"
         games.append(steam.Game(key, c["name"], d, "", "", apis, eng, True, c["exe"], c.get("mode", "vr"),
                                 store_id=store_id, prefix=c.get("prefix") or launcher.default_prefix(c["name"]),
-                                playtime=tracked.get(key, 0), last_played=last.get(key, 0)))
+                                playtime=tracked.get(key, 0), last_played=last.get(key, 0),
+                                kind=c.get("kind", "game"), root=c.get("root", "")))
     games.sort(key=lambda g: g.name.lower())
     return games, {k: v for k, v in matches.items() if v}
 
 
-# ------------------------------------------------------------- overview
-
+# UI
 class OverviewPage(Gtk.Box):
     def __init__(self, win):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
@@ -124,7 +119,7 @@ class OverviewPage(Gtk.Box):
                        margin_top=24, margin_bottom=36, margin_start=28, margin_end=28)
         body.append(label(t("Overview", "Vibe Check"), "large-title"))
         body.append(label(t("Your Windows VR games, running natively on Linux.",
-                            "Windows VR games on Linux. Yes, really. No, we don't fully get it either."),
+                            "Windows VR games on Linux. Yes, really."),
                           "page-subtitle", wrap=True))
 
         self.hero = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18, margin_top=10)
@@ -132,7 +127,7 @@ class OverviewPage(Gtk.Box):
         top = Gtk.Box(spacing=18)
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, hexpand=True)
         self.eyebrow = label("", "hero-eyebrow")
-        self.hero_title = label(t("Checking your setup…", "Poking your setup with a stick…"), "hero-title", wrap=True)
+        self.hero_title = label(t("Checking your setup…", "Checking your setup…"), "hero-title", wrap=True)
         self.hero_body = label("", "hero-body", wrap=True)
         for w in (self.eyebrow, self.hero_title, self.hero_body):
             text.append(w)
@@ -157,6 +152,8 @@ class OverviewPage(Gtk.Box):
         self.attention_title.set_margin_top(10)
         self.attention = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
         self.attention.add_css_class("boxed-list")
+        self.attention_title.set_visible(False)
+        self.attention.set_visible(False)
         body.append(self.attention_title)
         body.append(self.attention)
         self.append(scrolled(body))
@@ -202,21 +199,20 @@ class OverviewPage(Gtk.Box):
             n = len(blocking)
             self.hero_body.set_label(t(
                 f"{n} thing{'s' if n > 1 else ''} need{'' if n > 1 else 's'} attention before VR games can run.",
-                f"{n} thing{'s are' if n > 1 else ' is'} being difficult. Let's sort that out before you "
-                "strap a screen to your face."))
+                f"{n} thing{'s are' if n > 1 else ' is'} broken. Sort {'them' if n > 1 else 'it'} out before "
+                "you strap a screen to your face."))
             self.glyph.set_from_icon_name("applications-engineering-symbolic")
             if fixable:
-                self.hero_buttons.append(button(t("Fix Everything", "Make It Work™"), "pill", "light",
+                self.hero_buttons.append(button(t("Fix Everything", "Fix It All"), "pill", "light",
                                                 icon="object-select-symbolic", cb=lambda: self.win.fix_all(fixable)))
             self.hero_buttons.append(button(t("Details", "Show Me the Damage"), "pill", "glass",
                                             cb=lambda: self.win.navigate("system")))
         elif live:
             self.hero.add_css_class("live")
-            self.eyebrow.set_label(t(f"{server.title.upper()} IS LIVE", f"{server.title.upper()} IS ALIVE"))
-            self.hero_title.set_label(t("Ready for VR", "Strap in, nerd"))
+            self.eyebrow.set_label(t(f"{server.title.upper()} IS LIVE", f"{server.title.upper()} IS UP"))
+            self.hero_title.set_label(t("Ready for VR", "Strap in"))
             self.hero_body.set_label(t("Put on your headset and pick a game. Steam and Proton take it from here.",
-                                        "Headset on, pick a game, try not to punch the ceiling fan. "
-                                        "Steam and Proton handle the rest."))
+                                        "Headset on, pick a game, mind the ceiling fan."))
             self.glyph.set_from_icon_name("input-gaming-symbolic")
             self.hero_buttons.append(button(t("Open Library", "Show Me the Games"), "pill", "light", icon="view-grid-symbolic",
                                             cb=lambda: self.win.navigate("library")))
@@ -225,19 +221,19 @@ class OverviewPage(Gtk.Box):
             if server.dashboard:
                 self.hero_buttons.append(button(t("Dashboard", "Fiddly Settings"), "pill", "glass", cb=server.open_dashboard))
         else:
-            self.eyebrow.set_label(t("READY", "LOCKED & LOADED"))
+            self.eyebrow.set_label(t("READY", "READY"))
             if server:
-                self.hero_title.set_label(t("Ready when you are", "Your move, champ"))
+                self.hero_title.set_label(t("Ready when you are", "Your move"))
                 self.hero_body.set_label(t(
                     f"Start {server.title}, then connect from the {server.title} app on your headset.",
-                    f"Fire up {server.title}, then open the {server.title} app on your headset and say hi."))
+                    f"Start {server.title}, then open its app on your headset."))
                 self.hero_buttons.append(button(t(f"Start {server.title}", f"Wake Up {server.title}"), "pill", "light",
                                                 icon="media-playback-start-symbolic",
                                                 cb=lambda: self.win.toggle_server(server, True)))
             else:
-                self.hero_title.set_label(t("Ready for VR", "Strap in, nerd"))
+                self.hero_title.set_label(t("Ready for VR", "Good to go"))
                 self.hero_body.set_label(t("Your OpenXR runtime is configured. Launch a game from your library.",
-                                            "Your OpenXR runtime is set up and raring to go. Pick a game."))
+                                            "Your OpenXR runtime is set up. Pick a game."))
             self.glyph.set_from_icon_name("input-gaming-symbolic")
             self.hero_buttons.append(button(t("Open Library", "Show Me the Games"), "pill", "glass",
                                             cb=lambda: self.win.navigate("library")))
@@ -249,31 +245,31 @@ class OverviewPage(Gtk.Box):
         self.tiles.remove_all()
         self.tiles.append(self._tile(
             1, "applications-games-symbolic", t("Windows game", "The Windows game"),
-            st.protons[0][0] if st.protons else t("Proton missing", "Proton went AWOL"),
+            st.protons[0][0] if st.protons else t("Proton missing", "Proton's missing"),
             t("Wine runs the game; DXVK and VKD3D-Proton turn Direct3D into Vulkan.",
-              "Wine pretends to be Windows. DXVK and VKD3D-Proton turn DirectX into Vulkan. Everybody wins."),
+              "Wine pretends to be Windows. DXVK and VKD3D-Proton turn DirectX into Vulkan."),
             proton.state if proton else health.FAIL))
         vr_name = {"xrizer": "xrizer", "opencomposite": "OpenComposite", "steamvr": "SteamVR"}.get(st.vr_kind, t("Not set", "Nobody yet"))
         self.tiles.append(self._tile(
             2, "media-playlist-shuffle-symbolic", t("OpenVR bridge", "The OpenVR translator"), vr_name,
             t("OpenVR calls are translated to OpenXR. OpenXR games skip this step.",
-              "Turns OpenVR-speak into OpenXR-speak. OpenXR games skip the queue."),
+              "Turns OpenVR into OpenXR. OpenXR games skip the queue."),
             ovr.state if ovr else health.FAIL))
         self.tiles.append(self._tile(
             3, "video-display-symbolic", t("OpenXR runtime", "The OpenXR runtime"),
             st.active.name if st.active else
             (t(f"{server.title}, on standby", f"{server.title}, on standby")
-             if server and oxr and oxr.state == health.OK else t("None", "Nada")),
+             if server and oxr and oxr.state == health.OK else t("None", "Nothing")),
             t("Composites frames, handles tracking and reprojection.",
               "Draws the frames, tracks your head, hides the stutters."),
             oxr.state if oxr else health.FAIL))
         self.tiles.append(self._tile(
             4, "network-wireless-symbolic", t("Headset", "Your face computer"),
-            ((t("Streaming", "Beaming pixels") if live else t("Server stopped", "Server's napping"))
+            ((t("Streaming", "Streaming") if live else t("Server stopped", "Server's napping"))
              if server else t("Native", "Plugged in")),
             (t(f"{server.title} encodes and streams to your headset.",
-               f"{server.title} squishes the video and yeets it at your headset over Wi-Fi.")
-             if server else t("Direct-attached headset.", "Good old cable. Very retro.")),
+               f"{server.title} squishes the video and sends it over Wi-Fi.")
+             if server else t("Direct-attached headset.", "Good old cable.")),
             (health.OK if live else health.WARN) if srv else health.INFO))
 
         self.attention.remove_all()
@@ -284,12 +280,10 @@ class OverviewPage(Gtk.Box):
             self.attention.append(self.win.check_row(c))
 
 
-# -------------------------------------------------------------- library
-
 class GameCard(Gtk.Button):
     WIDTH, HEIGHT = 156, 234
 
-    def __init__(self, game, on_open):
+    def __init__(self, game, on_open, on_menu):
         super().__init__(halign=Gtk.Align.CENTER, valign=Gtk.Align.START)
         self.game = game
         self.add_css_class("game-card")
@@ -320,8 +314,7 @@ class GameCard(Gtk.Button):
             frame.set_child(fb)
         api = game.primary_api if game.vr_apis else ""
         if api:
-            badge = label({"openxr": "OpenXR", "openvr": "OpenVR", "oculus": "Oculus"}[api],
-                          "badge", api, xalign=0.5)
+            badge = label({"openxr": "OpenXR", "openvr": "OpenVR", "oculus": "Oculus"}[api], "badge", api, xalign=0.5)
             badge.set_halign(Gtk.Align.END)
             badge.set_valign(Gtk.Align.START)
             badge.set_margin_top(8)
@@ -335,17 +328,18 @@ class GameCard(Gtk.Button):
             ac.set_margin_top(8)
             ac.set_margin_start(8)
             frame.add_overlay(ac)
-        # Gtk.Picture reports the image's full size as natural width; cap it.
         box.append(Adw.Clamp(maximum_size=self.WIDTH, tightening_threshold=self.WIDTH, child=frame))
         title = label(game.name, "game-title", xalign=0.0, ellipsize=True)
         title.set_max_width_chars(1)
         title.set_hexpand(True)
         title.set_margin_start(4)
         box.append(title)
-        if game.custom:
-            sub = t("Windows · VR", "Windows · face mode") if game.mode == "vr" else t("Windows · Simple", "Windows · desk mode")
+        if game.kind == "app":
+            sub = t("App", "App")
+        elif game.custom:
+            sub = t("Windows · VR", "Windows · VR") if game.mode == "vr" else t("Windows · Simple", "Windows · flat")
         else:
-            sub = t("VR-ready", "VR-ready, baby") if game.is_vr else t("Steam", "Steam game")
+            sub = t("VR-ready", "VR") if game.is_vr else t("Steam", "Steam")
         if game.playtime >= 60:
             sub += f" · {game.playtime // 60} h"
         elif game.playtime:
@@ -357,6 +351,12 @@ class GameCard(Gtk.Button):
         box.set_size_request(self.WIDTH, -1)
         self.set_child(box)
         self.connect("clicked", lambda *_: on_open(game))
+        click = Gtk.GestureClick(button=3)
+        click.connect("pressed", lambda *_: on_menu(self, game))
+        self.add_controller(click)
+        drag = Gtk.DragSource(actions=Gdk.DragAction.MOVE)
+        drag.connect("prepare", lambda *_: Gdk.ContentProvider.new_for_value(game.appid))
+        self.add_controller(drag)
 
 
 class LibraryPage(Gtk.Box):
@@ -364,21 +364,16 @@ class LibraryPage(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.win = win
         self.games = []
+        self.mode = "all"
         self.nav = Adw.NavigationView()
         self.append(self.nav)
 
         tv = Adw.ToolbarView()
-        header = Adw.HeaderBar()
-        self.filter = Adw.ToggleGroup()
-        for name, text in (("all", t("All Games", "Everything")), ("vr", t("VR-Ready", "VR Only")), ("custom", t("Non-Steam", "Off-Steam"))):
-            self.filter.add(Adw.Toggle(name=name, label=text))
-        self.filter.set_active_name("all")
-        self.filter.connect("notify::active-name", lambda *_: self._refilter())
-        header.set_title_widget(self.filter)
-        self.search_btn = Gtk.ToggleButton(icon_name="system-search-symbolic", tooltip_text=t("Search (Ctrl+F)", "Find a game (Ctrl+F)"))
+        header = Adw.HeaderBar(show_title=False)
+        self.search_btn = Gtk.ToggleButton(icon_name="system-search-symbolic", tooltip_text=t("Search (Ctrl+F)", "Find something (Ctrl+F)"))
         header.pack_end(self.search_btn)
-        header.pack_end(button("", icon="list-add-symbolic", cb=self.add_game, tooltip=t("Add a Windows game", "Add a game Steam doesn't know about")))
-        header.pack_start(button("", icon="view-refresh-symbolic", cb=self.reload, tooltip=t("Rescan library", "Look again, harder")))
+        header.pack_end(button("", icon="list-add-symbolic", cb=self.add_game, tooltip=t("Add a Windows game or app", "Add something Steam doesn't know about")))
+        header.pack_start(button("", icon="view-refresh-symbolic", cb=self.reload, tooltip=t("Rescan library", "Look again")))
         sorts = [("name", t("Name", "A to Z")), ("recent", t("Recently played", "Played lately")),
                  ("played", t("Most played", "Most played"))]
         self.sort_keys = [k for k, _ in sorts]
@@ -390,7 +385,7 @@ class LibraryPage(Gtk.Box):
         header.pack_start(self.sort)
         tv.add_top_bar(header)
 
-        self.search = Gtk.SearchEntry(placeholder_text=t("Search games", "What are we playing?"), hexpand=True)
+        self.search = Gtk.SearchEntry(placeholder_text=t("Search your library", "What are we playing?"), hexpand=True)
         self.search.connect("search-changed", lambda *_: self._refilter())
         self.search_bar = Gtk.SearchBar(child=Adw.Clamp(maximum_size=420, child=self.search))
         self.search_bar.connect_entry(self.search)
@@ -398,33 +393,170 @@ class LibraryPage(Gtk.Box):
                                       GObject.BindingFlags.BIDIRECTIONAL)
         tv.add_top_bar(self.search_bar)
 
-        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        top = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin_top=8, margin_start=24, margin_end=24)
+        self.heading = label(t("Library", "The Pile"), "large-title")
+        self.count = label("", "page-subtitle")
+        top.append(self.heading)
+        top.append(self.count)
+        self.tabs = Gtk.Box(spacing=8)
+        self.tabs.add_css_class("tabs")
+        top.append(Gtk.ScrolledWindow(child=self.tabs, vscrollbar_policy=Gtk.PolicyType.NEVER,
+                                      propagate_natural_height=True))
+        page.append(top)
+
+        self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, vexpand=True)
         loading = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16,
                           valign=Gtk.Align.CENTER, halign=Gtk.Align.CENTER)
         loading.append(Adw.Spinner(width_request=40, height_request=40))
-        loading.append(label(t("Looking for VR games…", "Rummaging through your hard drives…"), "page-subtitle", xalign=0.5))
+        loading.append(label(t("Looking for games…", "Going through your drives…"), "page-subtitle", xalign=0.5))
         self.stack.add_named(loading, "loading")
-        self.empty = Adw.StatusPage(icon_name="applications-games-symbolic", title=t("No Games", "It's empty in here"),
-                                    description=t("Install games in Steam, or add a Windows game with +.",
-                                                  "Install some games in Steam, or hit + to add one yourself. Go on."))
+        self.empty = Adw.StatusPage(icon_name="applications-games-symbolic", title=t("Nothing Here", "It's empty in here"))
         self.stack.add_named(self.empty, "empty")
 
-        grid_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
-                           margin_top=20, margin_bottom=32, margin_start=24, margin_end=24)
-        self.heading = label(t("Library", "The Pile"), "large-title")
-        self.count = label("", "page-subtitle")
-        grid_box.append(self.heading)
-        grid_box.append(self.count)
+        grid_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,
+                           margin_top=18, margin_bottom=32, margin_start=24, margin_end=24)
         self.flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True, halign=Gtk.Align.START,
                                 valign=Gtk.Align.START, min_children_per_line=2, max_children_per_line=12,
-                                column_spacing=10, row_spacing=18, margin_top=18)
+                                column_spacing=10, row_spacing=18)
         self.flow.set_filter_func(self._filter)
         self.flow.set_sort_func(self._compare)
         grid_box.append(self.flow)
         self.stack.add_named(scrolled(grid_box, clamp=1600), "grid")
-        tv.set_content(self.stack)
+        page.append(self.stack)
+        tv.set_content(page)
         self.nav.add(Adw.NavigationPage(title=t("Library", "The Pile"), tag="root", child=tv))
+        self._build_tabs()
         self.reload()
+
+    def _builtin_tabs(self):
+        return (("all", t("All", "Everything")), ("vr", t("VR-Ready", "VR Only")), ("apps", t("Apps", "Apps")),
+                ("custom", t("Non-Steam", "Off-Steam")))
+
+    def _build_tabs(self):
+        clear(self.tabs)
+        for mode, text in self._builtin_tabs():
+            self.tabs.append(self._tab(mode, text))
+        folders = self.win.cfg.get("folders", [])
+        if folders:
+            bar = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+            bar.add_css_class("tab-rule")
+            self.tabs.append(bar)
+        for folder in folders:
+            self.tabs.append(self._tab(f"f:{folder['id']}", folder["name"], folder))
+        self.tabs.append(button(t("New Folder", "New Folder"), "tab", "tab-new", icon="list-add-symbolic",
+                                cb=self.new_folder))
+
+    def _tab(self, mode, text, folder=None):
+        b = button(text, "tab")
+        if mode == self.mode:
+            b.add_css_class("on")
+        b.connect("clicked", lambda *_: self.set_mode(mode))
+        if mode == "all" or folder:
+            drop = Gtk.DropTarget.new(GObject.TYPE_STRING, Gdk.DragAction.MOVE)
+            drop.connect("drop", lambda _t, appid, *_: self._dropped(appid, folder))
+            b.add_controller(drop)
+        if folder:
+            click = Gtk.GestureClick(button=3)
+            click.connect("pressed", lambda *_: self._folder_menu(b, folder))
+            b.add_controller(click)
+        return b
+
+    def set_mode(self, mode):
+        self.mode = mode
+        self._build_tabs()
+        self._refilter()
+
+    def _title(self):
+        if self.mode.startswith("f:"):
+            return self.folder_name(self.mode[2:])
+        return {"all": t("Library", "The Pile"), "vr": t("VR-Ready", "VR Only"), "apps": t("Apps", "Apps"),
+                "custom": t("Non-Steam", "Off-Steam")}[self.mode]
+
+    def folder_name(self, fid):
+        return next((f["name"] for f in self.win.cfg.get("folders", []) if f["id"] == fid), "")
+
+    def _dropped(self, appid, folder):
+        self.move_to_folder(appid, folder["id"] if folder else "")
+        return True
+
+    def move_to_folder(self, appid, fid):
+        links = self.win.cfg.setdefault("game_folders", {})
+        if fid:
+            links[appid] = fid
+        else:
+            links.pop(appid, None)
+        config.save(self.win.cfg)
+        self._refilter()
+
+    def _ask_name(self, heading, action, current, done):
+        entry = Adw.EntryRow(title=t("Name", "Name"), text=current)
+        lst = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        lst.add_css_class("boxed-list")
+        lst.append(entry)
+        alert = Adw.AlertDialog(heading=heading, extra_child=lst)
+        alert.add_response("cancel", t("Cancel", "Cancel"))
+        alert.add_response("ok", action)
+        alert.set_response_appearance("ok", Adw.ResponseAppearance.SUGGESTED)
+        alert.set_default_response("ok")
+        alert.set_close_response("cancel")
+
+        def on_response(_d, resp):
+            name = entry.get_text().strip()
+            if resp == "ok" and name:
+                done(name)
+        alert.connect("response", on_response)
+        alert.present(self.win)
+
+    def new_folder(self, then=None):
+        def made(name):
+            fid = uuid.uuid4().hex[:8]
+            self.win.cfg.setdefault("folders", []).append({"id": fid, "name": name})
+            config.save(self.win.cfg)
+            if then:
+                then(fid)
+            self._build_tabs()
+        self._ask_name(t("New Folder", "New Folder"), t("Create", "Create"), "", made)
+
+    def _popover(self, anchor, rows):
+        pop = Gtk.Popover()
+        pop.set_parent(anchor)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        for text, cb in rows:
+            box.append(button(text, "flat", "menu-row", cb=lambda cb=cb: (pop.popdown(), cb())))
+        pop.set_child(box)
+        pop.connect("closed", lambda p: GLib.idle_add(p.unparent))
+        pop.popup()
+
+    def _folder_menu(self, anchor, folder):
+        def rename():
+            def renamed(name):
+                folder["name"] = name
+                config.save(self.win.cfg)
+                self._build_tabs()
+                self._refilter()
+            self._ask_name(t("Rename Folder", "Rename Folder"), t("Rename", "Rename"), folder["name"], renamed)
+
+        def delete():
+            cfg = self.win.cfg
+            cfg["folders"] = [f for f in cfg["folders"] if f["id"] != folder["id"]]
+            cfg["game_folders"] = {k: v for k, v in cfg.get("game_folders", {}).items() if v != folder["id"]}
+            config.save(cfg)
+            if self.mode == f"f:{folder['id']}":
+                self.mode = "all"
+            self._build_tabs()
+            self._refilter()
+        self._popover(anchor, ((t("Rename…", "Rename…"), rename), (t("Delete Folder", "Delete Folder"), delete)))
+
+    def _card_menu(self, anchor, game):
+        current = self.win.cfg.get("game_folders", {}).get(game.appid, "")
+        rows = [(("✓ " if f["id"] == current else "") + f["name"],
+                 lambda f=f: self.move_to_folder(game.appid, f["id"])) for f in self.win.cfg.get("folders", [])]
+        if current:
+            rows.append((t("Take Out of Folder", "Take Out of Folder"), lambda: self.move_to_folder(game.appid, "")))
+        rows.append((t("New Folder…", "New Folder…"),
+                     lambda: self.new_folder(lambda fid: self.move_to_folder(game.appid, fid))))
+        self._popover(anchor, rows)
 
     def focus_search(self):
         self.nav.pop_to_tag("root")
@@ -438,8 +570,7 @@ class LibraryPage(Gtk.Box):
             anticheat.database(self.win.cfg.get("online", True))
             return result
         run_async(work, self._loaded,
-                  lambda e: self.win.toast(t(f"Couldn't scan library: {e}",
-                                              f"Tried to read your library and tripped: {e}")))
+                  lambda e: self.win.toast(t(f"Couldn't scan library: {e}", f"Couldn't read your library: {e}")))
 
     def _loaded(self, result):
         games, matches = result
@@ -451,7 +582,7 @@ class LibraryPage(Gtk.Box):
         self.games = games
         self.flow.remove_all()
         for g in games:
-            child = Gtk.FlowBoxChild(child=GameCard(g, self.open_game), focusable=False)
+            child = Gtk.FlowBoxChild(child=GameCard(g, self.open_game, self._card_menu), focusable=False)
             child.add_css_class("card-child")
             child.game = g
             self.flow.append(child)
@@ -459,10 +590,14 @@ class LibraryPage(Gtk.Box):
 
     def _filter(self, child):
         g = child.game
-        mode = self.filter.get_active_name()
+        mode = self.mode
         if mode == "vr" and not g.is_vr:
             return False
+        if mode == "apps" and g.kind != "app":
+            return False
         if mode == "custom" and not g.custom:
+            return False
+        if mode.startswith("f:") and self.win.cfg.get("game_folders", {}).get(g.appid) != mode[2:]:
             return False
         q = self.search.get_text().strip().lower()
         return not q or q in g.name.lower()
@@ -484,43 +619,51 @@ class LibraryPage(Gtk.Box):
     def _refilter(self):
         self.flow.invalidate_filter()
         visible = [g for g in self.games if self._filter(type("C", (), {"game": g}))]
+        apps = sum(1 for g in self.games if g.kind == "app")
+        games = len(self.games) - apps
         vr = sum(1 for g in self.games if g.is_vr)
-        mode = self.filter.get_active_name()
-        self.heading.set_label({"all": t("Library", "The Pile"), "vr": t("VR-Ready", "VR Only"), "custom": t("Non-Steam", "Off-Steam")}[mode])
-        self.count.set_label(t(f"{len(self.games)} games · {vr} with VR support detected",
-                               f"{len(self.games)} games · {vr} of them do the VR thing"))
+        mode = self.mode
+        self.heading.set_label(self._title())
+        counted = t(f"{games} game{'s' if games != 1 else ''}", f"{games} game{'s' if games != 1 else ''}")
+        if apps:
+            counted += t(f" · {apps} app{'s' if apps != 1 else ''}", f" · {apps} app{'s' if apps != 1 else ''}")
+        self.count.set_label(counted + t(f" · {vr} with VR", f" · {vr} with VR"))
         if visible:
             self.stack.set_visible_child_name("grid")
+            return
+        if self.games and self.search.get_text():
+            q = self.search.get_text()
+            self.empty.set_title(t("No Results", "Nothing"))
+            self.empty.set_description(t(f"Nothing matches “{q}”.", f"Nothing called “{q}” in here."))
+        elif mode == "vr" and self.games:
+            self.empty.set_title(t("No VR Games Found", "No VR games"))
+            self.empty.set_description(t("None of your installed games ship OpenVR or OpenXR. "
+                                         "Install a VR title in Steam and it will appear here.",
+                                         "None of your games use OpenVR or OpenXR. Install a VR game "
+                                         "and it'll show up here."))
+        elif mode == "apps":
+            self.empty.set_title(t("No Apps Yet", "No apps yet"))
+            self.empty.set_description(t("Run an app's installer from the Drop Folder, or add its .exe with +.",
+                                         "Run an app's installer from the Yeet Zone, or add its .exe with +."))
+        elif mode == "custom":
+            self.empty.set_title(t("No Non-Steam Games", "Nothing off-Steam yet"))
+            self.empty.set_description(t("Add a Windows game's .exe with +, or use the Drop Folder.",
+                                         "Add a Windows game's .exe with +, or use the Yeet Zone."))
+        elif mode.startswith("f:"):
+            self.empty.set_title(t("Empty Folder", "Empty folder"))
+            self.empty.set_description(t("Right-click anything in the library to move it here, or drag it onto this tab.",
+                                         "Right-click anything in The Pile to move it here, or drag it onto this tab."))
         else:
-            if self.games and mode == "vr":
-                self.empty.set_title(t("No VR Games Found", "Zero VR games. Zilch."))
-                self.empty.set_description(t("None of your installed games ship OpenVR or OpenXR. "
-                                             "Install a VR title in Steam and it will appear here.",
-                                             "None of your games speak OpenVR or OpenXR. Go grab a VR game "
-                                             "on Steam and it'll pop up here."))
-            elif self.games and self.search.get_text():
-                q = self.search.get_text()
-                self.empty.set_title(t("No Results", "Nope, nothing"))
-                self.empty.set_description(t(f"Nothing matches “{q}”.",
-                                             f"Couldn't find anything called “{q}”. Typo? We won't judge."))
-            elif mode == "custom":
-                self.empty.set_title(t("No Non-Steam Games", "Nothing off-Steam yet"))
-                self.empty.set_description(t("Add any Windows VR game's .exe with the + button.",
-                                             "Hit + to add any Windows game's .exe, or throw a .zip "
-                                             "or .rar at the Yeet Zone."))
-            else:
-                self.empty.set_title(t("No Games", "It's empty in here"))
-                self.empty.set_description(t("Install games in Steam, or add a Windows game with +.",
-                                             "Install some games in Steam, or hit + to add one yourself. Go on."))
-            self.stack.set_visible_child_name("empty")
+            self.empty.set_title(t("No Games", "It's empty in here"))
+            self.empty.set_description(t("Install games in Steam, or add a Windows game with +.",
+                                         "Install something in Steam, or add a Windows game with +."))
+        self.stack.set_visible_child_name("empty")
 
     def open_game(self, game):
         self.nav.push(GameDetail(self.win, game))
 
-    # -- adding non-Steam games
-
     def add_game(self):
-        dialog = Gtk.FileDialog(title=t("Choose a Windows Game", "Point me at a Windows game"))
+        dialog = Gtk.FileDialog(title=t("Choose a Windows Program", "Pick a Windows .exe"))
         flt = Gtk.FileFilter(name=t("Windows executables", "Windows .exe files"))
         flt.add_suffix("exe")
         store = Gio.ListStore.new(Gtk.FileFilter)
@@ -537,24 +680,34 @@ class LibraryPage(Gtk.Box):
         if not exe:
             return
         guess = os.path.basename(os.path.dirname(exe)) or os.path.splitext(os.path.basename(exe))[0]
-        entry = Adw.EntryRow(title=t("Name", "What do we call it?"), text=guess)
+        entry = Adw.EntryRow(title=t("Name", "Name"), text=guess)
+        kind_row = Adw.ActionRow(title=t("Type", "Type"))
+        kind = Adw.ToggleGroup(valign=Gtk.Align.CENTER)
+        kind.add(Adw.Toggle(name="game", label=t("Game", "Game")))
+        kind.add(Adw.Toggle(name="app", label=t("App", "App")))
+        kind.set_active_name("game")
+        kind_row.add_suffix(kind)
         lst = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
         lst.add_css_class("boxed-list")
         lst.append(entry)
-        alert = Adw.AlertDialog(heading=t("Add to Library", "New game, who dis?"), body=os.path.basename(exe), extra_child=lst)
-        alert.add_response("cancel", t("Cancel", "Nevermind"))
-        alert.add_response("add", t("Add", "Add It!"))
+        lst.append(kind_row)
+        alert = Adw.AlertDialog(heading=t("Add to Library", "Add to The Pile"), body=os.path.basename(exe), extra_child=lst)
+        alert.add_response("cancel", t("Cancel", "Cancel"))
+        alert.add_response("add", t("Add", "Add"))
         alert.set_response_appearance("add", Adw.ResponseAppearance.SUGGESTED)
         alert.set_default_response("add")
+        alert.set_close_response("cancel")
 
         def on_response(_d, resp):
             if resp != "add":
                 return
             name = entry.get_text().strip() or guess
-            self.win.cfg["custom_games"].append({"id": uuid.uuid4().hex[:12], "name": name, "exe": exe})
+            app = kind.get_active_name() == "app"
+            self.win.cfg["custom_games"].append({"id": uuid.uuid4().hex[:12], "name": name, "exe": exe,
+                                                 "kind": "app" if app else "game", "mode": "simple" if app else "vr"})
             config.save(self.win.cfg)
-            self.win.toast(t(f"Added {name}", f"{name} has joined the party"))
-            self.filter.set_active_name("all")
+            self.win.toast(t(f"Added {name}", f"{name} is in"))
+            self.set_mode("all")
             self.reload()
 
         alert.connect("response", on_response)
@@ -563,10 +716,11 @@ class LibraryPage(Gtk.Box):
     def remove_custom(self, game):
         gid = game.appid.split(":", 1)[1]
         self.win.cfg["custom_games"] = [c for c in self.win.cfg["custom_games"] if c["id"] != gid]
+        self.win.cfg.get("game_folders", {}).pop(game.appid, None)
         config.save(self.win.cfg)
         self.nav.pop_to_tag("root")
         self.win.toast(t(f"Removed {game.name} from your library. Its files were kept",
-                          f"{game.name} got kicked from the library. Its files are still on disk, chill."))
+                          f"{game.name} is off the list. Its files are still on disk"))
         self.reload()
 
 
@@ -576,12 +730,13 @@ class GameDetail(Adw.NavigationPage):
         self.win, self.game = win, game
         tv = Adw.ToolbarView()
         tv.add_top_bar(Adw.HeaderBar())
+        is_app = game.kind == "app"
         body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=22,
                        margin_top=12, margin_bottom=36, margin_start=24, margin_end=24)
 
         hero = Gtk.Overlay(overflow=Gtk.Overflow.HIDDEN)
         hero.add_css_class("hero-image")
-        hero.set_size_request(-1, 300)
+        hero.set_size_request(-1, 180 if is_app else 300)
         art = compat.artwork(game, "library_hero") or compat.artwork(game, "header")
         if art:
             pic = Gtk.Picture(content_fit=Gtk.ContentFit.COVER, can_shrink=True, hexpand=True)
@@ -615,27 +770,39 @@ class GameDetail(Adw.NavigationPage):
         self.sync_running()
         actions.append(self.play_btn)
         if not game.custom:
-            actions.append(button(t("Steam Page", "Gawk at It on Steam"), "pill", icon="web-browser-symbolic",
+            actions.append(button(t("Steam Page", "Steam Page"), "pill", icon="web-browser-symbolic",
                                   cb=lambda: win.open_uri(f"steam://nav/games/details/{game.appid}")))
         actions.append(Gtk.Box(hexpand=True))
         actions.append(button("", "circular", "flat", icon="folder-open-symbolic",
-                              cb=lambda: win.open_path(game.install_dir), tooltip=t("Show game files", "Show me the guts")))
+                              cb=lambda: win.open_path(game.install_dir), tooltip=t("Show files", "Show files")))
+        actions.append(button(t("Uninstall", "Uninstall"), "pill", "flat", "uninstall", cb=lambda: win.uninstall(game)))
         body.append(actions)
 
+        if not is_app:
+            self._vr_sections(body)
+        body.append(self._info_group())
+
+        tv.set_content(scrolled(body, clamp=1000, follow_focus=False))
+        self.set_child(tv)
+        if not game.custom:
+            self.update_options()
+
+    def _vr_sections(self, body):
+        win, game = self.win, self.game
         self.health = HealthGroup(win, self)
         body.append(self.health)
 
-        support = Adw.PreferencesGroup(title=t("VR Compatibility", "Will it VR?"))
+        support = Adw.PreferencesGroup(title=t("VR Compatibility", "VR support"))
         api_row = Adw.ActionRow(title=self._api_title(), subtitle=self._api_detail())
         api_row.set_subtitle_lines(3)
         api_row.add_prefix(Gtk.Image(icon_name=self._api_icon()))
         support.add(api_row)
 
         if not game.custom:
-            self.opts_row = Adw.ActionRow(title=t("Steam launch options", "Steam launch options (the magic words)"))
+            self.opts_row = Adw.ActionRow(title=t("Steam launch options", "Steam launch options"))
             self.opts_row.set_subtitle_lines(3)
             self.opts_row.add_prefix(Gtk.Image(icon_name="utilities-terminal-symbolic"))
-            self.copy_btn = button("", "flat", icon="edit-copy-symbolic", tooltip=t("Copy VR launch options", "Copy the magic words"),
+            self.copy_btn = button("", "flat", icon="edit-copy-symbolic", tooltip=t("Copy VR launch options", "Copy launch options"),
                                    cb=self.copy_options)
             self.copy_btn.set_valign(Gtk.Align.CENTER)
             self.apply_btn = Gtk.Button(valign=Gtk.Align.CENTER)
@@ -653,16 +820,28 @@ class GameDetail(Adw.NavigationPage):
         body.append(ModsGroup(win, self))
         body.append(ControlsGroup(win, self))
 
-        info = Adw.PreferencesGroup(title=t("Details", "The boring bits"))
+    def _info_group(self):
+        win, game = self.win, self.game
+        info = Adw.PreferencesGroup(title=t("Details", "Details"))
         if game.playtime:
             played = duration(game.playtime * 60)
             when = t(f" · last played {ago(game.last_played)}", f" · last seen {ago(game.last_played)}") \
                 if game.last_played else ""
             info.add(Adw.ActionRow(title=t("Play time", "Time sunk"), subtitle=played + when))
-        loc = Adw.ActionRow(title=t("Location", "Lives at"), subtitle=game.exe if game.custom else game.install_dir)
+        loc = Adw.ActionRow(title=t("Location", "Location"), subtitle=game.exe if game.custom else game.install_dir)
         loc.set_subtitle_selectable(True)
         info.add(loc)
+        info.add(self._folder_row())
         if game.custom:
+            kind_row = Adw.ActionRow(title=t("Type", "Type"))
+            kind = Adw.ToggleGroup(valign=Gtk.Align.CENTER)
+            kind.add(Adw.Toggle(name="game", label=t("Game", "Game")))
+            kind.add(Adw.Toggle(name="app", label=t("App", "App")))
+            kind.set_active_name(game.kind)
+            kind.connect("notify::active-name", lambda g, _p: self.set_kind(g.get_active_name()))
+            kind_row.add_suffix(kind)
+            info.add(kind_row)
+        if game.custom and game.kind != "app":
             mode_row = Adw.ActionRow(title=t("Launch mode", "Launch mode"),
                                      subtitle=t("VR sets up your headset; Simple runs flat",
                                                 "VR wakes up the whole headset circus. Simple just runs it on your monitor."))
@@ -673,15 +852,16 @@ class GameDetail(Adw.NavigationPage):
             mode.connect("notify::active-name", lambda g, _p: self.set_mode(g.get_active_name()))
             mode_row.add_suffix(mode)
             info.add(mode_row)
-            self.exe_row = Adw.ActionRow(title=t("Executable", "The .exe that matters"), subtitle=escape(os.path.basename(game.exe)))
-            change = Gtk.Button(label=t("Change…", "Swap It…"), valign=Gtk.Align.CENTER)
+        if game.custom:
+            self.exe_row = Adw.ActionRow(title=t("Executable", "Starts"), subtitle=escape(os.path.basename(game.exe)))
+            change = Gtk.Button(label=t("Change…", "Change…"), valign=Gtk.Align.CENTER)
             change.connect("clicked", lambda *_: self.change_exe())
             self.exe_row.add_suffix(change)
             info.add(self.exe_row)
             info.add(Adw.ActionRow(title=t("Runs with", "Powered by"),
                                    subtitle="umu-launcher + Proton" if shutil.which("umu-run")
                                    else "Proton"))
-            rm = Adw.ButtonRow(title=t("Remove from Library", "Kick It from the Library"))
+            rm = Adw.ButtonRow(title=t("Remove from Library", "Remove from The Pile (keeps files)"))
             rm.add_css_class("destructive-action")
             rm.connect("activated", lambda *_: win.library.remove_custom(game))
             info.add(rm)
@@ -689,23 +869,36 @@ class GameDetail(Adw.NavigationPage):
             info.add(Adw.ActionRow(title=t("App ID", "Steam's secret number"), subtitle=game.appid))
             if game.buildid:
                 info.add(Adw.ActionRow(title=t("Build", "Build number"), subtitle=game.buildid))
-        body.append(info)
+        return info
 
-        # Don't jump past the hero when the Play button takes focus on push.
-        tv.set_content(scrolled(body, clamp=1000, follow_focus=False))
-        self.set_child(tv)
-        if not game.custom:
-            self.update_options()
+    def _folder_row(self):
+        win, game = self.win, self.game
+        row = Adw.ActionRow(title=t("Folder", "Folder"))
+        folders = win.cfg.get("folders", [])
+        names = [t("None", "None")] + [f["name"] for f in folders]
+        pick = Gtk.DropDown.new_from_strings(names)
+        pick.set_valign(Gtk.Align.CENTER)
+        current = win.cfg.get("game_folders", {}).get(game.appid, "")
+        ids = [""] + [f["id"] for f in folders]
+        pick.set_selected(ids.index(current) if current in ids else 0)
+        pick.connect("notify::selected", lambda d, _p: win.library.move_to_folder(game.appid, ids[d.get_selected()]))
+        row.add_suffix(pick)
+        return row
+
+    def set_kind(self, kind):
+        self.game.kind = kind
+        self.update_entry(kind=kind, mode="simple" if kind == "app" else self.game.mode)
+        self.win.library.nav.pop_to_tag("root")
 
     def _api_title(self):
         g = self.game
         if "oculus" in g.vr_apis and not ({"openvr", "openxr"} & set(g.vr_apis)):
-            return t("Oculus SDK only", "Oculus-only (yikes)")
+            return t("Oculus SDK only", "Oculus only")
         if g.vr_apis:
             names = {"openxr": "OpenXR", "openvr": "OpenVR"}
             return " + ".join(names[a] for a in ("openxr", "openvr") if a in g.vr_apis)
         if g.vr_engine:
-            return t("Engine VR plugins", "Maybe VR? (engine leftovers)")
+            return t("Engine VR plugins", "Maybe VR")
         return t("No VR runtime detected", "No VR in sight")
 
     def _api_detail(self):
@@ -715,17 +908,17 @@ class GameDetail(Adw.NavigationPage):
             parts = []
             if "openxr" in apis:
                 parts.append(t("OpenXR goes straight to your runtime through Proton's wineopenxr.",
-                                "Speaks OpenXR, so it goes straight to your runtime through Proton's "
-                                "wineopenxr. Smooth."))
+                                "Uses OpenXR, so it goes straight to your runtime through Proton's "
+                                "wineopenxr."))
             if "openvr" in apis:
-                parts.append(t("OpenVR is translated to OpenXR by xrizer — no SteamVR needed.",
-                                "Speaks OpenVR, which xrizer translates on the fly. No SteamVR, no bloat."))
+                parts.append(t("OpenVR is translated to OpenXR by xrizer. No SteamVR needed.",
+                                "Uses OpenVR, which xrizer translates on the fly. No SteamVR needed."))
             return " ".join(parts)
         if "oculus" in apis:
             return t("This build only talks to the Oculus runtime, which has no Linux equivalent. "
                      "Look for an OpenVR/SteamVR version of the game.",
                      "This one only talks to the Oculus runtime, and that doesn't exist on Linux. "
-                     "Hunt down the SteamVR version instead.")
+                     "Look for the SteamVR version.")
         if g.vr_engine:
             return t("Unreal ships VR plugins with every game, so this may be a flat-screen title. "
                      "If it has a VR mode, launching it here will route it to your headset.",
@@ -759,17 +952,17 @@ class GameDetail(Adw.NavigationPage):
                 self.apply_btn.add_css_class("suggested-action")
             self.apply_btn.set_sensitive(not steam_up)
             self.apply_btn.set_tooltip_text(
-                t("Quit Steam first — it overwrites launch options on exit",
-                  "Close Steam first. It overwrites this stuff on exit, the rascal") if steam_up else
-                (t("Remove the VR variables", "Take the magic words back out") if ok
-                 else t("Add the VR variables for this game", "Add the magic words to this game")))
+                t("Quit Steam first. It overwrites launch options on exit",
+                  "Close Steam first. It overwrites this on exit") if steam_up else
+                (t("Remove the VR variables", "Remove the launch options") if ok
+                 else t("Add the VR variables for this game", "Add launch options to this game")))
             self.options_ok = ok
         run_async(fetch, show)
 
     def copy_options(self):
         text = steam.merge_env(steam.get_launch_options(self.game.appid), runtimes.vr_env(), runtimes.ENV_KEYS)
-        self.win.copy(text, t("Launch options copied — paste into Steam → Properties → Launch Options",
-                             "Copied! Paste it into Steam → Properties → Launch Options"))
+        self.win.copy(text, t("Launch options copied. Paste into Steam → Properties → Launch Options",
+                             "Copied. Paste it into Steam → Properties → Launch Options"))
 
     def toggle_options(self):
         self.apply_options(not getattr(self, "options_ok", False))
@@ -786,8 +979,8 @@ class GameDetail(Adw.NavigationPage):
                                             lambda o: steam.merge_env(o, env, runtimes.ENV_KEYS))
 
         def done(n):
-            self.win.toast(t("Launch options removed", "Magic words removed") if remove
-                           else t("VR launch options applied", "Magic words applied. You're welcome."))
+            self.win.toast(t("Launch options removed", "Launch options removed") if remove
+                           else t("VR launch options applied", "Launch options applied"))
             if not self.game.custom:
                 self.update_options()
             self.health.reload()
@@ -807,12 +1000,16 @@ class GameDetail(Adw.NavigationPage):
         self.running = running
         b = self.play_btn
         if running:
-            text, icon = t("Stop", "Pull the Plug"), "media-playback-stop-symbolic"
+            text, icon = t("Stop", "Stop"), "media-playback-stop-symbolic"
             b.remove_css_class("suggested-action")
             b.add_css_class("destructive-action")
         else:
-            text = t("Play", "Play It Flat") if self.game.custom and self.game.mode == "simple" \
-                else t("Play in VR", "Enter the Matrix")
+            if self.game.kind == "app":
+                text = t("Open", "Open")
+            elif self.game.custom and self.game.mode == "simple":
+                text = t("Play", "Play")
+            else:
+                text = t("Play in VR", "Play in VR")
             icon = "media-playback-start-symbolic"
             b.remove_css_class("destructive-action")
             b.add_css_class("suggested-action")
@@ -832,7 +1029,7 @@ class GameDetail(Adw.NavigationPage):
         self.sync_running()
         self.update_entry(mode=mode)
         self.win.toast(t("VR mode on", "VR mode on. Mind the furniture.") if mode == "vr"
-                       else t("Simple mode: launches without VR", "Simple mode. Flat and cozy, no headset needed."))
+                       else t("Simple mode: launches without VR", "Simple mode. No headset needed."))
 
     def change_exe(self):
         dialog = Gtk.FileDialog(title=t("Choose the Game's Executable", "Which .exe is the real one?"))
@@ -854,11 +1051,9 @@ class GameDetail(Adw.NavigationPage):
                 self.exe_row.set_subtitle(escape(os.path.basename(path)))
                 self.update_entry(exe=path)
                 exe = os.path.basename(path)
-                self.win.toast(t(f"{self.game.name} now starts {exe}", f"Got it, {self.game.name} now launches {exe}"))
+                self.win.toast(t(f"{self.game.name} now starts {exe}", f"{self.game.name} now starts {exe}"))
         dialog.open(self.win, None, picked)
 
-
-# ------------------------------------------------------- preference pages
 
 class RuntimePage(DynamicPrefs):
     TITLE = ("Runtime", "The Engine Room")
@@ -871,11 +1066,11 @@ class RuntimePage(DynamicPrefs):
         for s in st.servers:
             g = self.group(title=t(f"{s.title} Server", f"{s.title} server"),
                            description=t("Streams your VR session to a standalone headset over Wi-Fi.",
-                                         "Beams your games to a standalone headset over Wi-Fi. Wireless freedom, baby.")
+                                         "Streams your games to a standalone headset over Wi-Fi.")
                            if s.kind == "wivrn" else t("Drives headsets connected directly to this PC.",
                                                        "Runs headsets plugged straight into this PC."))
             row = Adw.SwitchRow(title=s.title,
-                                subtitle=t("Running — connect from your headset", "Up and running. Go connect from your headset.")
+                                subtitle=t("Running. Connect from your headset", "Up and running. Go connect from your headset.")
                                 if st.running[s.kind] else t("Stopped", "Taking a nap"),
                                 active=st.running[s.kind])
             row.add_prefix(dot(health.OK if st.running[s.kind] else health.INFO))
@@ -883,7 +1078,7 @@ class RuntimePage(DynamicPrefs):
             g.add(row)
             if s.dashboard:
                 dash = Adw.ActionRow(title=t("Dashboard", "Fiddly Settings"), subtitle=t("Pair headsets, set bitrate and codecs",
-                                              "Pair headsets, crank the bitrate, nerd out on codecs"),
+                                              "Pair headsets, set the bitrate, pick codecs"),
                                      activatable=True)
                 dash.add_suffix(Gtk.Image(icon_name="go-next-symbolic"))
                 dash.connect("activated", lambda *_a, s=s: s.open_dashboard())
@@ -904,12 +1099,12 @@ class RuntimePage(DynamicPrefs):
             g.add(auto)
 
         g = self.group(title=t("OpenXR Runtime", "Pick your OpenXR runtime"),
-                       description=t("Every OpenXR game — and every OpenVR game after translation — renders here.",
+                       description=t("Every OpenXR game. And every OpenVR game after translation. Renders here.",
                                      "Every OpenXR game, and every OpenVR game after translation, ends up here."))
         if not st.runtimes:
-            row = Adw.ActionRow(title=t("No runtimes installed", "No runtimes. Like, at all."),
+            row = Adw.ActionRow(title=t("No runtimes installed", "No runtimes found"),
                                 subtitle=t("Install WiVRn for Quest/Pico or Monado for PC headsets.",
-                                           "Grab WiVRn for Quest/Pico, or Monado for headsets with cables."))
+                                           "Get WiVRn for Quest/Pico, or Monado for headsets with cables."))
             row.add_prefix(Gtk.Image(icon_name="dialog-warning-symbolic"))
             g.add(row)
         first = None
@@ -923,16 +1118,16 @@ class RuntimePage(DynamicPrefs):
             is_active = os.path.realpath(rt.manifest) == active
             check.set_active(is_active)
             sub = {"wivrn": t("Wireless streaming · recommended for Quest, Pico",
-                              "Wireless streaming · the Quest/Pico crowd's favorite"),
-                   "monado": t("Open-source runtime for wired headsets", "Open source, for headsets on a leash"),
-                   "steamvr": t("Valve's runtime — heavier, adds latency",
-                                "Valve's runtime. Chunky, and adds latency")}.get(rt.kind, rt.manifest)
+                              "Wireless streaming for Quest and Pico"),
+                   "monado": t("Open-source runtime for wired headsets", "Open source, for wired headsets"),
+                   "steamvr": t("Valve's runtime. Heavier, adds latency",
+                                "Valve's runtime. Heavier, adds latency")}.get(rt.kind, rt.manifest)
             if not rt.valid:
-                sub = t("Broken — runtime library is missing", "Busted. Its library went missing")
+                sub = t("Broken. Runtime library is missing", "Broken. Its library is missing")
             row = Adw.ActionRow(title=rt.name, subtitle=sub, activatable_widget=check, sensitive=rt.valid)
             row.add_prefix(check)
             if is_active:
-                row.add_suffix(label(t("Active", "In charge"), "caption-text"))
+                row.add_suffix(label(t("Active", "Active"), "caption-text"))
             check.connect("toggled", lambda c, rt=rt: (c.get_active() and not self.updating)
                           and self.win.set_xr_runtime(rt))
             g.add(row)
@@ -958,9 +1153,9 @@ class TranslationPage(DynamicPrefs):
                                      "run on your runtime, no SteamVR required."))
         info = {
             "xrizer": t("Recommended · fast, modern OpenVR → OpenXR layer",
-                        "The good one · fast, modern, OpenVR → OpenXR"),
-            "opencomposite": t("Mature OpenVR → OpenXR layer", "The wise old one · OpenVR → OpenXR"),
-            "steamvr": t("Native SteamVR — not recommended with WiVRn or Monado",
+                        "Fast and current · OpenVR → OpenXR"),
+            "opencomposite": t("Mature OpenVR → OpenXR layer", "The older one · OpenVR → OpenXR"),
+            "steamvr": t("Native SteamVR. Not recommended with WiVRn or Monado",
                          "Actual SteamVR. Doesn't play nice with WiVRn or Monado"),
         }
         first = None
@@ -984,14 +1179,14 @@ class TranslationPage(DynamicPrefs):
         if not st.layers:
             row = Adw.ActionRow(title=t("No translation layer installed", "No translator here"),
                                 subtitle=t("Download xrizer below to run OpenVR games.",
-                                           "Grab xrizer below and OpenVR games will work."))
+                                           "Get xrizer below and OpenVR games will work."))
             row.add_prefix(Gtk.Image(icon_name="dialog-warning-symbolic"))
             g.add(row)
 
         dl = Adw.ActionRow(title=t("Get the latest xrizer", "Get fresh xrizer"),
                            subtitle=t("Downloads the newest release from GitHub into your home folder",
                                       "Pulls the newest release off GitHub into your home folder"))
-        self.dl_btn = Gtk.Button(label=t("Download", "Gimme"), valign=Gtk.Align.CENTER)
+        self.dl_btn = Gtk.Button(label=t("Download", "Download"), valign=Gtk.Align.CENTER)
         self.dl_spinner = Adw.Spinner(visible=self.downloading)
         self.dl_btn.set_sensitive(not self.downloading)
         self.dl_btn.connect("clicked", lambda *_: self.download())
@@ -1009,7 +1204,7 @@ class TranslationPage(DynamicPrefs):
         g = self.group(title=t("Windows Compatibility", "Windows impersonation"),
                        description=t("Proton runs Windows games through Wine and translates graphics to Vulkan.",
                                      "Proton runs Windows games through Wine and turns DirectX into Vulkan. "
-                                     "Witchcraft, basically."))
+                                     ""))
         if st.protons:
             names = [n for n, _ in st.protons]
             combo = Adw.ComboRow(title=t("Proton for non-Steam games", "Proton for off-Steam games"),
@@ -1027,12 +1222,12 @@ class TranslationPage(DynamicPrefs):
                                 subtitle=t("Install Proton Experimental in Steam → Library → Tools",
                                            "Install Proton Experimental in Steam → Library → Tools. Takes a minute.")))
         for icon, title, sub in (
-            ("applications-system-symbolic", t("Win32 → Linux", "Windows → Linux, somehow"), "Wine"),
+            ("applications-system-symbolic", t("Win32 → Linux", "Windows → Linux"), "Wine"),
             ("video-display-symbolic", t("Direct3D 9 / 10 / 11 → Vulkan", "Old DirectX → Vulkan"), "DXVK"),
             ("video-display-symbolic", t("Direct3D 12 → Vulkan", "New DirectX → Vulkan"), "VKD3D-Proton"),
             ("input-gaming-symbolic", t("OpenXR → native runtime", "OpenXR → straight to your headset"),
              "wineopenxr (Proton)"),
-            ("media-playlist-shuffle-symbolic", t("OpenVR → OpenXR", "OpenVR → OpenXR, lost in translation"),
+            ("media-playlist-shuffle-symbolic", t("OpenVR → OpenXR", "OpenVR → OpenXR"),
              "vrclient bridge + xrizer"),
         ):
             row = Adw.ActionRow(title=title)
@@ -1058,7 +1253,7 @@ class TranslationPage(DynamicPrefs):
 
         run_async(work, lambda p: finish(t(f"xrizer installed and active · {os.path.basename(p)}",
                                            f"Fresh xrizer installed and working · {os.path.basename(p)}")),
-                  lambda e: finish(t(f"Download failed: {e}", f"Download faceplanted: {e}")))
+                  lambda e: finish(t(f"Download failed: {e}", f"Download failed: {e}")))
 
 
 class SystemPage(DynamicPrefs):
@@ -1070,7 +1265,7 @@ class SystemPage(DynamicPrefs):
         super().__init__(win, **kw)
         g = Adw.PreferencesGroup(title=t("Appearance", "Looks"))
         row = Adw.ActionRow(title=t("Theme", "Theme"),
-                            subtitle=t("Night and day mode", "Vampire mode or sunshine mode"))
+                            subtitle=t("Night and day mode", "Dark or light"))
         row.add_prefix(Gtk.Image(icon_name="preferences-desktop-appearance-symbolic"))
         self.theme = Adw.ToggleGroup(valign=Gtk.Align.CENTER)
         for name, text in (("system", "Auto"), ("light", "Day"), ("dark", "Night")):
@@ -1082,7 +1277,7 @@ class SystemPage(DynamicPrefs):
         g.add(row)
         serious = Adw.SwitchRow(title=t("Serious mode", "Serious mode"),
                                 subtitle=t("Use plain, professional wording. Turn off for the fun version",
-                                           "For when your boss, your mom or a Linux purist is watching"),
+                                           "Plain wording instead of the jokes"),
                                 active=voice.is_serious())
         serious.add_prefix(Gtk.Image(icon_name="x-office-document-symbolic"))
         serious.connect("notify::active", lambda r, _p: self.win.set_serious(r.get_active()))
@@ -1116,7 +1311,7 @@ class SystemPage(DynamicPrefs):
 
     def _sound_group(self):
         g = Adw.PreferencesGroup(title=t("Sound", "Ears"))
-        vr = Adw.SwitchRow(title=t("Play sound through the headset", "Sound goes in your face"),
+        vr = Adw.SwitchRow(title=t("Play sound through the headset", "Sound follows the headset"),
                            subtitle=t("Switches the output to WiVRn while a VR game runs",
                                       "Moves the sound to WiVRn while you play, and back when you stop"),
                            active=self.win.cfg.get("vr_audio", True))
@@ -1126,7 +1321,7 @@ class SystemPage(DynamicPrefs):
 
         self.sinks = [s for s in audio.sinks() if s["kind"] != "vr"]
         saved = self.win.cfg.get("audio_after", "")
-        names = [t("Automatic (headphones first)", "Auto (headphones win)")] + \
+        names = [t("Automatic (headphones first)", "Auto (headphones first)")] + \
                 [f"{s['title']} · {audio.label(s['kind'])}" for s in self.sinks]
         after = Adw.ComboRow(title=t("Sound output after playing", "Where sound goes after"),
                              subtitle=t("Also switches the output now when no game is running",
@@ -1165,11 +1360,11 @@ class SystemPage(DynamicPrefs):
             row = Adw.ActionRow(title=f"{vendor} GPU", subtitle=t(f"Kernel driver: {driver}", f"Driver: {driver}") if driver else "")
             row.add_prefix(Gtk.Image(icon_name="video-display-symbolic"))
             g.add(row)
-        g = self.group(title=t("Files", "Files nerds care about"))
+        g = self.group(title=t("Files", "Files"))
         for title, path in (
             (t("Active OpenXR runtime", "Current OpenXR runtime"), runtimes.ACTIVE_LINK),
             (t("OpenVR paths", "OpenVR paths"), openvr.VRPATH),
-            (t("Logs", "Logs (for when things go boom)"), LOG_DIR),
+            (t("Logs", "Logs"), LOG_DIR),
             *data_paths(),
         ):
             row = Adw.ActionRow(title=title, subtitle=path, activatable=True)
@@ -1180,299 +1375,6 @@ class SystemPage(DynamicPrefs):
             g.add(row)
 
 
-# ------------------------------------------------------------ drop folder
-
-class QueueItem:
-    def __init__(self, info):
-        self.info = info
-        self.row = None
-        self.status = None
-        self.pct = -1
-        self.state = "pending"  # pending | installing | failed
-
-
-class DropPage(Gtk.Box):
-    def __init__(self, win):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL)
-        self.win = win
-        self.items = []
-        self.busy = False
-        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14,
-                       margin_top=24, margin_bottom=36, margin_start=28, margin_end=28)
-        body.append(label(t("Drop Folder", "Yeet Zone"), "large-title"))
-        body.append(label(t("Drop a game's .zip or .rar. BifluxVR unpacks it, finds the executable and adds "
-                            "it to your library.",
-                            "Throw a game's .zip or .rar at me. I'll unpack it, sniff out the right .exe and "
-                            "stick it in your library."), "page-subtitle", wrap=True))
-
-        self.zone = Gtk.CenterBox(orientation=Gtk.Orientation.VERTICAL, margin_top=10)
-        self.zone.add_css_class("dropzone")
-        self.zone.set_size_request(-1, 240)
-        inner = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, halign=Gtk.Align.CENTER)
-        glyph = Gtk.Image(icon_name="folder-download-symbolic", pixel_size=56)
-        glyph.add_css_class("drop-glyph")
-        inner.append(glyph)
-        inner.append(label(t("Drop .zip or .rar files here", "Yeet your .zip or .rar files here"), "drop-title", xalign=0.5))
-        inner.append(label(t("Each game gets its own folder", "Every game gets its own little room"),
-                           "caption-text", xalign=0.5))
-        choose = button(t("Choose Files…", "Or Browse Like a Civilized Person…"), "pill", cb=self.choose_files)
-        choose.set_halign(Gtk.Align.CENTER)
-        choose.set_margin_top(8)
-        inner.append(choose)
-        self.zone.set_center_widget(inner)
-        body.append(self.zone)
-
-        target = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
-        target.connect("drop", self._on_drop)
-        target.connect("enter", self._on_enter)
-        target.connect("leave", lambda *_: self.zone.remove_css_class("hover"))
-        self.add_controller(target)
-
-        setup = Adw.PreferencesGroup(title=t("Setup", "How do you want it?"), margin_top=12)
-        type_row = Adw.ActionRow(title=t("Game type", "What kind of game?"))
-        self.type_row = type_row
-        self.mode = Adw.ToggleGroup(valign=Gtk.Align.CENTER)
-        self.mode.add(Adw.Toggle(name="vr", label="VR"))
-        self.mode.add(Adw.Toggle(name="simple", label="Simple"))
-        self.mode.set_active_name(win.cfg.get("install_mode", "vr"))
-        self.mode.connect("notify::active-name", lambda *_: self._mode_changed())
-        type_row.add_suffix(self.mode)
-        setup.add(type_row)
-        self.loc_row = Adw.ActionRow(title=t("Install to", "Put it in"))
-        self.loc_row.set_subtitle_selectable(True)
-        change = Gtk.Button(label=t("Change…", "Swap It…"), valign=Gtk.Align.CENTER)
-        change.connect("clicked", lambda *_: self.choose_folder())
-        self.loc_row.add_suffix(change)
-        setup.add(self.loc_row)
-        body.append(setup)
-
-        self.queue = Adw.PreferencesGroup(title=t("Ready to Install", "Waiting in line"), margin_top=6)
-        body.append(self.queue)
-        self.install_btn = button(t("Install", "Yeet It In"), "pill", "suggested-action", cb=self.install_all)
-        self.install_btn.set_halign(Gtk.Align.END)
-        body.append(self.install_btn)
-
-        self.done = Adw.PreferencesGroup(title=t("Installed", "Done and dusted"), margin_top=6, visible=False)
-        body.append(self.done)
-        self.append(scrolled(body))
-        self._mode_changed(save=False)
-
-    # -- settings
-
-    def _mode_key(self):
-        return f"install_dir_{self.mode.get_active_name()}"
-
-    def _mode_changed(self, save=True):
-        mode = self.mode.get_active_name()
-        if save:
-            self.win.set_cfg("install_mode", mode)
-        self.type_row.set_subtitle(
-            t("Starts your headset stack and routes the game to VR",
-              "Fires up the whole headset circus and sends the game to VR") if mode == "vr"
-            else t("Launches on your desktop, no VR setup", "Plain old monitor gaming. No headset, no fuss"))
-        self.loc_row.set_subtitle(escape(self.win.cfg[self._mode_key()]))
-
-    def choose_folder(self):
-        dialog = Gtk.FileDialog(title=t("Choose Install Folder", "Where should games live?"))
-        current = self.win.cfg[self._mode_key()]
-        if os.path.isdir(current):
-            dialog.set_initial_folder(Gio.File.new_for_path(current))
-
-        def picked(d, res):
-            try:
-                folder = d.select_folder_finish(res)
-            except GLib.Error:
-                return
-            if folder and folder.get_path():
-                self.win.set_cfg(self._mode_key(), folder.get_path())
-                self._mode_changed(save=False)
-        dialog.select_folder(self.win, None, picked)
-
-    # -- adding archives
-
-    def _on_enter(self, *_):
-        self.zone.add_css_class("hover")
-        return Gdk.DragAction.COPY
-
-    def _on_drop(self, _target, value, _x, _y):
-        self.zone.remove_css_class("hover")
-        self.add_paths([f.get_path() for f in value.get_files() if f.get_path()])
-        return True
-
-    def choose_files(self):
-        dialog = Gtk.FileDialog(title=t("Choose Game Archives", "Pick some archives"))
-        flt = Gtk.FileFilter(name=t("Game archives (.zip, .rar)", ".zip and .rar files"))
-        for ext in installer.ARCHIVE_EXTS:
-            flt.add_suffix(ext.lstrip("."))
-        store = Gio.ListStore.new(Gtk.FileFilter)
-        store.append(flt)
-        dialog.set_filters(store)
-
-        def picked(d, res):
-            try:
-                files = d.open_multiple_finish(res)
-            except GLib.Error:
-                return
-            self.add_paths([files.get_item(i).get_path() for i in range(files.get_n_items())])
-        dialog.open_multiple(self.win, None, picked)
-
-    def add_paths(self, paths):
-        archives = [p for p in paths if p and installer.supported(p)]
-        if len(archives) < len(paths):
-            self.win.toast(t("Only .zip and .rar files can be installed",
-                             "Only .zip and .rar, please. I'm picky like that"))
-        # A multi-part RAR is opened through part 1; the other parts come along.
-        picked = []
-        for p in archives:
-            if (installer.volume_number(p) or 1) > 1:
-                p = installer.first_volume(p)
-                if not p:
-                    self.win.toast(t("Part 1 of that multi-part archive is missing",
-                                     "That's not part 1, and I can't find part 1. I need it to start"))
-                    continue
-            if p not in picked:
-                picked.append(p)
-        queued = {i.info.path for i in self.items}
-        for p in picked:
-            if p in queued:
-                continue
-            queued.add(p)
-            run_async(lambda p=p: installer.inspect(p), self._add_item,
-                      lambda e: self.win.toast(str(e)))
-
-    def _add_item(self, info):
-        item = QueueItem(info)
-        row = Adw.EntryRow(title=self._row_title(info), text=info.name)
-        row.add_prefix(Gtk.Image(icon_name="package-x-generic-symbolic"))
-        item.status = Gtk.Box(valign=Gtk.Align.CENTER)
-        row.add_suffix(item.status)
-        item.row = row
-        self._set_status(item, button("", "flat", "circular", icon="window-close-symbolic",
-                                      tooltip=t("Remove", "Nope, remove it"), cb=lambda: self.remove(item)))
-        self.items.append(item)
-        self.queue.add(row)
-        self._sync()
-
-    def _row_title(self, info, note=""):
-        n = len(info.exes)
-        exes = (t("no .exe found", "no .exe in sight") if not n
-                else t(f"{n} executable{'s' if n > 1 else ''}", f"{n} .exe file{'s' if n > 1 else ''}"))
-        base = f"{os.path.basename(info.path)} · {installer.human(info.size)} · {exes}"
-        return f"{base} · {note}" if note else base
-
-    def _set_status(self, item, widget):
-        clear(item.status)
-        item.status.append(widget)
-
-    def remove(self, item):
-        if item.state == "installing":
-            return
-        self.queue.remove(item.row)
-        self.items.remove(item)
-        self._sync()
-
-    def _sync(self):
-        pending = [i for i in self.items if i.state in ("pending", "failed")]
-        self.queue.set_visible(bool(self.items))
-        self.install_btn.set_visible(bool(pending))
-        self.install_btn.set_sensitive(not self.busy)
-        n = len(pending)
-        self.install_btn.set_label(t(f"Install {n} Game{'s' if n != 1 else ''}",
-                                     f"Yeet {n} Game{'s' if n != 1 else ''} In"))
-
-    # -- installing
-
-    def install_all(self):
-        if self.busy:
-            return
-        items = [i for i in self.items if i.state in ("pending", "failed")]
-        if not items:
-            return
-        mode = self.mode.get_active_name()
-        dest = self.win.cfg[self._mode_key()]
-        jobs = []
-        for item in items:
-            name = item.row.get_text().strip() or item.info.name
-            item.state = "installing"
-            item.row.set_editable(False)
-            spinner = Gtk.Box(spacing=8)
-            spinner.append(Adw.Spinner())
-            item.pct_label = label("0%", "caption-text")
-            spinner.append(item.pct_label)
-            self._set_status(item, spinner)
-            jobs.append((item, name))
-        self.busy = True
-        self._sync()
-
-        def progress(item, fraction):
-            pct = int(fraction * 100)
-            if pct != item.pct:
-                item.pct = pct
-                GLib.idle_add(lambda: (item.pct_label.set_label(f"{pct}%"), False)[1])
-
-        def work():
-            for item, name in jobs:
-                try:
-                    result = installer.install(item.info.path, dest, name,
-                                               lambda f, item=item: progress(item, f))
-                    GLib.idle_add(self._installed, item, name, mode, *result)
-                except Exception as e:  # noqa: BLE001 — shown on the row
-                    GLib.idle_add(self._failed, item, str(e))
-            GLib.idle_add(self._finished)
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _installed(self, item, name, mode, game_dir, exe, apis):
-        gid = uuid.uuid4().hex[:12]
-        self.win.cfg["custom_games"].append({"id": gid, "name": name, "exe": exe, "mode": mode})
-        config.save(self.win.cfg)
-        self.queue.remove(item.row)
-        self.items.remove(item)
-        game = steam.Game(f"custom:{gid}", name, game_dir, "", "", list(apis), [], True, exe, mode)
-        if mode == "vr" and not apis:
-            note = t("No VR runtime found in the files. It may only run on a virtual screen",
-                     "No VR stuff found inside. It'll probably show up on a virtual screen")
-        elif mode == "simple" and apis:
-            note = t("This game supports VR. Switch it to VR on its library page",
-                     "Psst, this one does VR! Flip it to VR on its library page")
-        else:
-            note = os.path.relpath(exe, game_dir)
-        row = Adw.ActionRow(title=escape(name), subtitle=escape(note))
-        row.set_subtitle_lines(2)
-        icon = Gtk.Image(icon_name="object-select-symbolic")
-        icon.add_css_class("success")
-        row.add_prefix(icon)
-        show = button("", "flat", "circular", icon="folder-open-symbolic", tooltip=t("Show files", "Show me the files"),
-                      cb=lambda: self.win.open_path(game_dir))
-        show.set_valign(Gtk.Align.CENTER)
-        play = button(t("Play", "Let's Go"), "pill", "suggested-action", cb=lambda: self.win.play(game))
-        play.set_valign(Gtk.Align.CENTER)
-        row.add_suffix(show)
-        row.add_suffix(play)
-        self.done.add(row)
-        self.done.set_visible(True)
-        self.win.toast(t(f"{name} installed", f"{name} is in. Have fun!"))
-        return False
-
-    def _failed(self, item, msg):
-        item.state = "failed"
-        item.row.set_editable(True)
-        item.row.set_title(escape(f"⚠ {msg}"))
-        item.row.add_css_class("error")
-        self._set_status(item, button("", "flat", "circular", icon="window-close-symbolic",
-                                      tooltip=t("Remove", "Nope, remove it"), cb=lambda: self.remove(item)))
-        self.win.toast(msg)
-        return False
-
-    def _finished(self):
-        self.busy = False
-        self._sync()
-        self.win.library.reload()
-        return False
-
-
-# --------------------------------------------------------------- donate
-
 class DonatePage(Gtk.Box):
     def __init__(self, win):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
@@ -1482,8 +1384,7 @@ class DonatePage(Gtk.Box):
         body.append(label(t("Support BifluxVR", "Feed the Dev"), "large-title"))
         body.append(label(t("BifluxVR is free and made by intramy. If it made your VR nights better, "
                             "you can chip in.",
-                            "BifluxVR is free, made by intramy with love and questionable sleep habits. "
-                            "If it made your VR nights better, toss a coin."), "page-subtitle", wrap=True))
+                            "BifluxVR is free. intramy still has to eat."), "page-subtitle", wrap=True))
         body.append(self._goal_card())
         flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True,
                            min_children_per_line=1, max_children_per_line=3,
@@ -1496,8 +1397,7 @@ class DonatePage(Gtk.Box):
         body.append(self._custom_card(*donate.CUSTOM))
         note = label(t("Payments open in your browser and are handled by the payment provider. "
                        "BifluxVR never sees your card details.",
-                       "Payment happens in your browser through the payment provider. BifluxVR never sees "
-                       "your card. Couldn't even if it tried."), "caption-text", wrap=True, xalign=0.5)
+                       "Payment happens in your browser. BifluxVR never sees your card."), "caption-text", wrap=True, xalign=0.5)
         note.set_margin_top(10)
         body.append(note)
         self.append(scrolled(body))
@@ -1512,14 +1412,14 @@ class DonatePage(Gtk.Box):
         box.append(bar)
 
         def show(raised, goal):
-            text.set_label(f"€{raised} / €{goal} — Monthly development expenses")
+            text.set_label(f"€{raised} / €{goal} · Monthly development expenses")
             bar.set_fraction(min(raised / goal, 1) if goal > 0 else 0)
 
         show(0, donate.GOAL)
         threading.Thread(target=lambda: GLib.idle_add(show, *donate.funding()), daemon=True).start()
         return box
 
-    def _card(self, tid, emoji, title, blurb, lo, hi, default):
+    def _card(self, tid, emoji, title, blurb, price):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         box.add_css_class("donate-card")
         box.add_css_class(f"tier-{tid}")
@@ -1532,29 +1432,12 @@ class DonatePage(Gtk.Box):
         b = label(t(*blurb), "caption-text", wrap=True)
         b.set_max_width_chars(22)
         box.append(b)
-        amount = label(f"€{default}", "donate-amount")
+        amount = label(f"€{price}", "donate-amount")
         amount.set_margin_top(10)
         box.append(amount)
-        scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, lo, hi, 1)
-        scale.set_draw_value(False)
-        scale.set_round_digits(0)
-        scale.set_value(default)
-        for v in range(lo, hi + 1):
-            scale.add_mark(v, Gtk.PositionType.BOTTOM, f"€{v}" if v in (lo, hi) else None)
-        box.append(scale)
-        btn = button(t(f"Donate €{default}", f"Yes, Take My €{default}"), "pill", "donate")
+        btn = button(t(f"Donate €{price}", f"Buy It, €{price}"), "pill", "donate", cb=lambda: self.donate(tid, price))
         btn.set_margin_top(10)
         box.append(btn)
-
-        def changed(s):
-            v = round(s.get_value())
-            if v != s.get_value():
-                s.set_value(v)  # snap to whole euros
-                return
-            amount.set_label(f"€{v}")
-            btn.set_label(t(f"Donate €{v}", f"Yes, Take My €{v}"))
-        scale.connect("value-changed", changed)
-        btn.connect("clicked", lambda *_: self.donate(tid, title, round(scale.get_value())))
         return box
 
     def _custom_card(self, tid, emoji, title, blurb, lo, hi, default, picks):
@@ -1590,30 +1473,27 @@ class DonatePage(Gtk.Box):
             chip.set_valign(Gtk.Align.CENTER)
             row.append(chip)
         box.append(row)
-        btn = button(t(f"Donate €{default}", f"Yes, Take My €{default}"), "pill", "donate")
+        btn = button(t(f"Donate €{default}", f"Buy It, €{default}"), "pill", "donate")
         btn.set_halign(Gtk.Align.START)
         btn.set_margin_top(10)
         box.append(btn)
 
         def changed(s):
             v = int(s.get_value())
-            btn.set_label(t(f"Donate €{v}", f"Yes, Take My €{v}"))
+            btn.set_label(t(f"Donate €{v}", f"Buy It, €{v}"))
         spin.connect("value-changed", changed)
-        btn.connect("clicked", lambda *_: (spin.update(), self.donate(tid, title, int(spin.get_value()))))
+        btn.connect("clicked", lambda *_: (spin.update(), self.donate(tid, int(spin.get_value()))))
         return box
 
-    def donate(self, tid, title, amount):
+    def donate(self, tid, amount):
         url = donate.url_for(tid, amount)
         if not url:
             self.win.toast(t("Donations aren't open yet. Thanks for the thought!",
-                              "The tip jar isn't set up yet, but it's the thought that counts. Love you."))
+                              "Donations aren't open yet. Thanks anyway."))
             return
         self.win.open_uri(url)
-        self.win.toast(t(f"Thank you! Opening checkout for €{amount}…",
-                          f"You absolute legend. Opening checkout for €{amount}…"))
+        self.win.toast(t(f"Thank you! Opening checkout for €{amount}…", f"Thanks! Opening checkout for €{amount}…"))
 
-
-# ------------------------------------------------------------------ window
 
 def pages():
     return [
@@ -1646,7 +1526,6 @@ class MainWindow(Adw.ApplicationWindow):
         self.toasts.set_child(self.split)
         self.set_content(self.toasts)
 
-        # sidebar
         side = Adw.ToolbarView()
         sh = Adw.HeaderBar()
         sh.set_title_widget(Adw.WindowTitle(title="BifluxVR"))
@@ -1701,7 +1580,7 @@ class MainWindow(Adw.ApplicationWindow):
         logo.set_pixel_size(18)
         inner = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER)
         inner.append(logo)
-        inner.append(Gtk.Label(label=t("Join our Discord", "Hang out on Discord")))
+        inner.append(Gtk.Label(label=t("Join our Discord", "Join the Discord")))
         self.discord_btn = button("", "pill", "discord", cb=lambda: self.open_uri(DISCORD_URL))
         self.discord_btn.set_child(inner)
         self.discord_btn.set_margin_start(12)
@@ -1715,14 +1594,13 @@ class MainWindow(Adw.ApplicationWindow):
         side.set_content(sbox)
         self.split.set_sidebar(Adw.NavigationPage(title="BifluxVR", child=side))
 
-        # content
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE, transition_duration=180)
         self.overview = OverviewPage(self)
         self.library = LibraryPage(self)
         self.runtime = RuntimePage(self)
         self.translation = TranslationPage(self)
         self.system = SystemPage(self)
-        self.drop = DropPage(self)
+        self.drop = YeetPage(self)
         self.donate = DonatePage(self)
         self.headset = HeadsetPage(self)
         self.stats = StatsPage(self)
@@ -1759,7 +1637,6 @@ class MainWindow(Adw.ApplicationWindow):
         self._show_notices()
         if not self.cfg.get("welcomed") and not os.environ.get("BIFLUXVR_SCREENSHOT"):
             GLib.idle_add(self._welcome)
-        # updates.check() itself waits hours between real lookups
         GLib.timeout_add_seconds(5, lambda: (self._check_updates(), False)[1])
         self._notice_id = GLib.timeout_add_seconds(1800, self._check_updates)
         self.connect("close-request", self._close_request)
@@ -1767,11 +1644,11 @@ class MainWindow(Adw.ApplicationWindow):
     def _close_request(self, _win):
         if not self.meta.busy():
             return False
-        alert = Adw.AlertDialog(heading=t("Stop the Download?", "Bail on the download?"),
+        alert = Adw.AlertDialog(heading=t("Stop the Download?", "Stop the download?"),
                                 body=t("A Meta game is still downloading. Closing stops it; Resume picks it up later.",
                                        "A Meta game is still coming down. Close now and it stops, Keep Going resumes it later."))
         alert.add_response("cancel", t("Keep Downloading", "Keep Downloading"))
-        alert.add_response("close", t("Stop and Close", "Close Anyway"))
+        alert.add_response("close", t("Stop and Close", "Stop and Close"))
         alert.set_response_appearance("close", Adw.ResponseAppearance.DESTRUCTIVE)
         alert.set_default_response("cancel")
 
@@ -1791,18 +1668,18 @@ class MainWindow(Adw.ApplicationWindow):
         icon = Gtk.Image(icon_name=APP_ID, pixel_size=96)
         icon.add_css_class("welcome-icon")
         box.append(icon)
-        box.append(label(t("Welcome to BifluxVR", "Welcome to BifluxVR!"), "welcome-title", xalign=0.5, wrap=True))
-        box.append(label(t("Made by intramy", "Lovingly made by intramy"), "welcome-by", xalign=0.5))
+        box.append(label(t("Welcome to BifluxVR", "Welcome to BifluxVR"), "welcome-title", xalign=0.5, wrap=True))
+        box.append(label("Made by intramy", "welcome-by", xalign=0.5))
         box.append(label(t("BifluxVR plays your Windows VR games on Linux: Proton runs the game, xrizer translates "
                            "it to OpenXR and WiVRn streams it to your headset. Pick a game in the Library and "
                            "press Play.",
-                           "Windows VR games, on Linux, in your face. Proton runs them, xrizer translates them, "
-                           "WiVRn beams them to your headset. Pick something from The Pile and smash Play."),
+                           "Windows VR games on Linux. Proton runs them, xrizer translates them, "
+                           "WiVRn sends them to your headset. Pick something from The Pile and press Play."),
                          "welcome-text", xalign=0.5, wrap=True))
         box.append(label(t("Free and open source. If you enjoy it, Donate keeps it going.",
-                           "Free forever. If it makes you happy, Feed the Dev keeps the lights on."),
+                           "Free to use. Feed the Dev helps if you want to."),
                          "caption-text", xalign=0.5, wrap=True))
-        go = button(t("Get Started", "Let's Go"), "pill", "suggested-action", cb=dialog.close)
+        go = button(t("Get Started", "Get Started"), "pill", "suggested-action", cb=dialog.close)
         go.set_halign(Gtk.Align.CENTER)
         go.set_margin_top(8)
         box.append(go)
@@ -1813,7 +1690,6 @@ class MainWindow(Adw.ApplicationWindow):
         dialog.present(self)
         return False
 
-    # -- navigation
 
     def navigate(self, name, show=True):
         self.stack.set_visible_child_name(name)
@@ -1836,7 +1712,6 @@ class MainWindow(Adw.ApplicationWindow):
             yield r
             r = r.get_next_sibling()
 
-    # -- state
 
     def _tick(self):
         if self.is_visible():
@@ -1851,7 +1726,6 @@ class MainWindow(Adw.ApplicationWindow):
         if isinstance(page, GameDetail):
             page.sync_running()
 
-    # -- notifications
 
     def _check_updates(self):
         if not self.cfg.get("notify", True):
@@ -1927,7 +1801,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         def fail(e):
             self._refreshing = False
-            self.toast(t(f"Status check failed: {e}", f"Couldn't check the status, oops: {e}"))
+            self.toast(t(f"Status check failed: {e}", f"Couldn't check the status: {e}"))
 
         run_async(State, done, fail)
 
@@ -1967,28 +1841,27 @@ class MainWindow(Adw.ApplicationWindow):
             row.add_suffix(b)
         return row
 
-    # -- actions
 
     def apply_fix(self, check, btn=None):
         if btn:
             btn.set_sensitive(False)
         run_async(lambda: perform_fix(check), lambda m: (self.toast(m), self.refresh_soon()),
-                  lambda e: (self.toast(t(f"Couldn't fix {check.title}: {e}", f"Couldn't fix {check.title}, sorry: {e}")),
+                  lambda e: (self.toast(t(f"Couldn't fix {check.title}: {e}", f"Couldn't fix {check.title}: {e}")),
                               self.refresh(force=True)))
 
     def fix_all(self, checks):
         def work():
             return [perform_fix(c) for c in checks]
         run_async(work, lambda msgs: (self.toast(" · ".join(msgs)), self.refresh_soon()),
-                  lambda e: (self.toast(t(f"Fix failed: {e}", f"The fix didn't stick: {e}")), self.refresh(force=True)))
+                  lambda e: (self.toast(t(f"Fix failed: {e}", f"The fix didn't work: {e}")), self.refresh(force=True)))
 
     def toggle_server(self, server, on):
         def work():
             server.start() if on else server.stop()
         if not on:
-            self.toast(t(f"Stopping {server.title}…", f"Telling {server.title} to go to bed…"), timeout=2)
+            self.toast(t(f"Stopping {server.title}…", f"Stopping {server.title}…"), timeout=2)
         started = t(f"{server.title} started", f"{server.title} is up!")
-        stopped = t(f"{server.title} stopped", f"{server.title} is down. Goodnight, sweet prince")
+        stopped = t(f"{server.title} stopped", f"{server.title} is down")
         run_async(work, lambda _: (self.toast(started if on else stopped),
                                    self.refresh_soon()),
                   lambda e: self.toast(f"{server.title}: {e}"))
@@ -1996,7 +1869,7 @@ class MainWindow(Adw.ApplicationWindow):
     def set_xr_runtime(self, rt):
         try:
             runtimes.set_active(rt.manifest)
-            self.toast(t(f"{rt.name} is now your OpenXR runtime", f"{rt.name} is in charge now"))
+            self.toast(t(f"{rt.name} is now your OpenXR runtime", f"{rt.name} is your runtime now"))
         except OSError as e:
             self.toast(t(f"Couldn't switch runtime: {e}", f"The runtime refused to switch: {e}"))
         self.refresh(force=True)
@@ -2035,16 +1908,14 @@ class MainWindow(Adw.ApplicationWindow):
     def _sync_theme_button(self):
         dark = Adw.StyleManager.get_default().get_dark()
         self.theme_btn.set_icon_name("weather-clear-symbolic" if dark else "weather-clear-night-symbolic")
-        self.theme_btn.set_tooltip_text(t("Day mode", "Let there be light") if dark
-                                        else t("Night mode", "Embrace the darkness"))
+        self.theme_btn.set_tooltip_text(t("Day mode", "Light mode") if dark
+                                        else t("Night mode", "Dark mode"))
 
     def set_serious(self, on):
         if on == voice.is_serious():
             return
         self.set_cfg("serious_mode", on)
         voice.set_serious(on)
-        # Every string is chosen when its widget is built, so build a fresh
-        # window in the new voice. Deferred: we're inside the switch's handler.
         GLib.idle_add(self._rebuild)
 
     def _rebuild(self):
@@ -2056,7 +1927,7 @@ class MainWindow(Adw.ApplicationWindow):
             new.maximize()
         new.navigate(page)
         new.present()
-        new.toast(t("Serious mode on", "Fun mode is back, baby"))
+        new.toast(t("Serious mode on", "Jokes are back on"))
         GLib.source_remove(self._tick_id)
         GLib.source_remove(self._notice_id)
         self.destroy()
@@ -2097,23 +1968,23 @@ class MainWindow(Adw.ApplicationWindow):
         steam_up = steam.running()
         body = t("Steam needs these launch options so the game can reach your headset from inside "
                  "the Steam Runtime:",
-                 "Steam needs these magic words so the game can find your headset from inside its "
-                 "little sandbox:") + f"\n\n<tt>{escape(merged)}</tt>"
+                 "Steam needs these launch options so the game can find your headset from inside its "
+                 "sandbox:") + f"\n\n<tt>{escape(merged)}</tt>"
         if steam_up:
             body += t("\n\nQuit Steam to apply them automatically, or copy them into the game's "
                       "Properties → General → Launch Options.",
                       "\n\nClose Steam and I'll add them myself, or copy them into the game's "
                       "Properties → General → Launch Options.")
-        alert = Adw.AlertDialog(heading=t("Set Up VR Launch Options?", "Add the Magic Words?"),
+        alert = Adw.AlertDialog(heading=t("Set Up VR Launch Options?", "Add Launch Options?"),
                                 body=body, body_use_markup=True)
-        alert.add_response("cancel", t("Cancel", "Nevermind"))
-        alert.add_response("anyway", t("Play Anyway", "YOLO, Play Anyway"))
+        alert.add_response("cancel", t("Cancel", "Cancel"))
+        alert.add_response("anyway", t("Play Anyway", "Play Anyway"))
         if steam_up:
             alert.add_response("copy", t("Copy Options", "Copy Them"))
             alert.set_response_appearance("copy", Adw.ResponseAppearance.SUGGESTED)
             alert.set_default_response("copy")
         else:
-            alert.add_response("apply", t("Apply & Play", "Do It & Play"))
+            alert.add_response("apply", t("Apply & Play", "Apply & Play"))
             alert.set_response_appearance("apply", Adw.ResponseAppearance.SUGGESTED)
             alert.set_default_response("apply")
         alert.set_close_response("cancel")
@@ -2122,8 +1993,8 @@ class MainWindow(Adw.ApplicationWindow):
             if resp == "anyway":
                 self._launch(game, lambda: self._start_steam(game))
             elif resp == "copy":
-                self.copy(merged, t("Copied — paste into Steam → Properties → Launch Options",
-                                   "Copied! Paste into Steam → Properties → Launch Options"))
+                self.copy(merged, t("Copied. Paste into Steam → Properties → Launch Options",
+                                   "Copied. Paste into Steam → Properties → Launch Options"))
             elif resp == "apply":
                 def work():
                     steam.set_launch_options(game.appid, lambda o: steam.merge_env(o, env, runtimes.ENV_KEYS))
@@ -2134,6 +2005,48 @@ class MainWindow(Adw.ApplicationWindow):
 
         alert.connect("response", on_response)
         alert.present(self)
+
+    def uninstall(self, game):
+        if launcher.running(game):
+            self.toast(t(f"Close {game.name} first", f"Close {game.name} first"))
+            return
+        plan = uninstall.plan(game, self.cfg)
+        what = t("app", "app") if game.kind == "app" else t("game", "game")
+        body = t(f"{escape(game.name)} and all of its save files will be permanently lost. This can't be undone.",
+                 f"{escape(game.name)} and all of its save files will be permanently lost. There's no undo.")
+        if plan.steam:
+            body += t("\n\nSteam shows its own confirmation next. Saves in Steam Cloud stay on Steam's servers.",
+                      "\n\nSteam shows its own confirmation next. Saves in Steam Cloud stay on Steam's servers.")
+        if plan.paths:
+            body += "\n\n" + "\n".join(f"<tt>{escape(p)}</tt>" for p in plan.paths)
+        if plan.shared:
+            body += t(f"\n\n<tt>{escape(plan.shared)}</tt> holds other things too, so it stays. Delete the {what}'s files there yourself.",
+                      f"\n\n<tt>{escape(plan.shared)}</tt> holds other things too, so it stays. Delete the {what}'s files there yourself.")
+        alert = Adw.AlertDialog(heading=t(f"Uninstall {game.name}?", f"Uninstall {game.name}?"), body=body, body_use_markup=True)
+        alert.add_response("cancel", t("Cancel", "Cancel"))
+        alert.add_response("uninstall", t("Uninstall", "Uninstall"))
+        alert.set_response_appearance("uninstall", Adw.ResponseAppearance.DESTRUCTIVE)
+        alert.set_default_response("cancel")
+        alert.set_close_response("cancel")
+
+        def on_response(_d, resp):
+            if resp != "uninstall":
+                return
+            if plan.steam:
+                self.open_uri(f"steam://uninstall/{game.appid}")
+                run_async(lambda: uninstall.wait_for_steam(game, self.cfg),
+                          lambda gone: gone and self._uninstalled(game))
+                return
+            run_async(lambda: uninstall.run(game, self.cfg, plan), lambda _: self._uninstalled(game),
+                      lambda e: self.toast(t(f"Couldn't uninstall {game.name}: {e}", f"Couldn't uninstall {game.name}: {e}")))
+        alert.connect("response", on_response)
+        alert.present(self)
+
+    def _uninstalled(self, game):
+        config.save(self.cfg)
+        self.library.nav.pop_to_tag("root")
+        self.library.reload()
+        self.toast(t(f"{game.name} uninstalled", f"{game.name} is gone"))
 
     def _start_steam(self, game):
         notes = launcher.prepare(self.cfg)
@@ -2151,25 +2064,24 @@ class MainWindow(Adw.ApplicationWindow):
         self._sound_back(audio.restore(self.cfg.get("audio_after", "")))
 
     def _sound_back(self, title):
-        """Called from any thread once the output has been moved back."""
         if not title:
             return
 
         def show():
             toast = Adw.Toast(title=escape(t(f"Sound is back on {title}", f"Sound's back on {title}")),
-                              button_label=t("Change", "Nope, Elsewhere"), timeout=6)
+                              button_label=t("Change", "Change"), timeout=6)
             toast.connect("button-clicked", lambda *_: self.navigate("system"))
             self.toasts.add_toast(toast)
             return False
         GLib.idle_add(show)
 
     def stop(self, game):
-        alert = Adw.AlertDialog(heading=t(f"Stop {game.name}?", f"Pull the plug on {game.name}?"),
+        alert = Adw.AlertDialog(heading=t(f"Stop {game.name}?", f"Stop {game.name}?"),
                                 body=t("The game is closed immediately. Anything you haven't saved will be lost.",
-                                       "This kills it on the spot. Anything you didn't save is gone forever. "
-                                       "Like tears in rain."))
-        alert.add_response("cancel", t("Cancel", "Wait, No"))
-        alert.add_response("stop", t("Stop App", "Kill It"))
+                                       "This kills it on the spot. Anything you didn't save is gone."
+                                       ""))
+        alert.add_response("cancel", t("Cancel", "Cancel"))
+        alert.add_response("stop", t("Stop App", "Stop It"))
         alert.set_response_appearance("stop", Adw.ResponseAppearance.DESTRUCTIVE)
         alert.set_default_response("cancel")
         alert.set_close_response("cancel")
@@ -2183,41 +2095,38 @@ class MainWindow(Adw.ApplicationWindow):
                 return audio.restore(self.cfg.get("audio_after", ""))
 
             def done(title):
-                self.toast(t(f"{game.name} stopped", f"{game.name} has left the building"))
+                self.toast(t(f"{game.name} stopped", f"{game.name} stopped"))
                 self._sound_back(title)
                 GLib.timeout_add(500, lambda: (self._sync_running(), False)[1])
             run_async(work, done, lambda e: self.toast(t(f"Couldn't stop {game.name}: {e}",
-                                                         f"{game.name} won't die: {e}")))
+                                                         f"Couldn't stop {game.name}: {e}")))
         alert.connect("response", on_response)
         alert.present(self)
 
     def _launch(self, game, work, vr=True):
-        self.toast(t(f"Starting {game.name}…", f"Booting up {game.name}…"))
+        self.toast(t(f"Starting {game.name}…", f"Starting {game.name}…"))
 
         def done(notes):
             extra = f" · {' · '.join(notes)}" if notes else ""
-            self.toast(t(f"Launched {game.name}{extra}", f"{game.name} is launching. Have fun!{extra}"))
+            self.toast(t(f"Launched {game.name}{extra}", f"{game.name} is starting{extra}"))
             self.refresh_soon(1500)
             GLib.timeout_add(1500, lambda: (self._sync_running(), False)[1])
             if vr and self.cfg.get("vr_audio", True):
                 run_async(audio.to_headset, lambda title: title and self.toast(
-                    t(f"Sound now plays on {title}", f"Sound's now in your face: {title}")))
+                    t(f"Sound now plays on {title}", f"Sound now plays on {title}")))
 
         run_async(work, done, lambda e: self.toast(t(f"Couldn't start {game.name}: {e}",
-                                                     f"{game.name} refused to start: {e}")))
+                                                     f"{game.name} didn't start: {e}")))
 
-    # -- utilities
 
     def toast(self, text, timeout=4):
         self.toasts.add_toast(Adw.Toast(title=escape(text), timeout=timeout))
 
     def copy(self, text, msg=None):
         self.get_clipboard().set(text)
-        self.toast(msg or t("Copied", "Copied!"))
+        self.toast(msg or t("Copied", "Copied"))
 
     def _shine(self):
-        # One sweep at a time and only while focused: an endless CSS animation
-        # would keep redrawing the app behind a running VR game.
         if self.is_active():
             self.discord_btn.add_css_class("shine")
             GLib.timeout_add(1300, lambda: self.discord_btn.remove_css_class("shine"))
@@ -2228,7 +2137,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def open_path(self, path):
         if not os.path.exists(path):
-            self.toast(t(f"{path} doesn't exist yet", f"{path} doesn't exist yet. Spooky."))
+            self.toast(t(f"{path} doesn't exist yet", f"{path} doesn't exist yet"))
             return
         Gtk.FileLauncher.new(Gio.File.new_for_path(path)).launch(self, None, None)
 
@@ -2239,7 +2148,6 @@ class BifluxVRApp(Adw.Application):
         self.restarting = False
 
     def restart(self):
-        """Quit, and start again once the main loop is gone (see main())."""
         self.restarting = True
         self.quit()
 
@@ -2313,13 +2221,13 @@ class BifluxVRApp(Adw.Application):
             license_type=Gtk.License.GPL_3_0_ONLY, website="https://github.com/Intramy/BifluxVR",
             issue_url="https://github.com/Intramy/BifluxVR/issues",
             comments=t("Play Windows VR games on Linux.\n\nBifluxVR orchestrates Proton, DXVK, VKD3D-Proton, "
-                       "xrizer and WiVRn/Monado — the fastest translation path available on Linux today.",
-                       "Windows VR games on Linux.\n\nHeld together with Proton, DXVK, VKD3D-Proton, xrizer, "
-                       "WiVRn/Monado and a whole lot of hope. Somehow it's fast."),
+                       "xrizer and WiVRn/Monado. The fastest translation path available on Linux today.",
+                       "Windows VR games on Linux.\n\nRuns on Proton, DXVK, VKD3D-Proton, xrizer "
+                       "and WiVRn or Monado."),
         )
         about.set_developers(["intramy"])
         about.add_link("Discord", DISCORD_URL)
-        about.add_credit_section(t("Built on", "Standing on the shoulders of"), [
+        about.add_credit_section(t("Built on", "Built on"), [
             "Proton & Wine https://github.com/ValveSoftware/Proton",
             "xrizer https://github.com/Supreeeme/xrizer",
             "WiVRn https://github.com/WiVRn/WiVRn",

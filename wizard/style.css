@@ -1,11 +1,8 @@
-/* BifluxVR Setup — same palette as the app: blue → indigo → purple */
-
+/* UI */
 window.bifluxvr-setup {
   font-family: "Inter Variable", "Inter", "SF Pro Display", "SF Pro Text", "Cantarell", sans-serif;
   font-feature-settings: "cv11", "ss01";
 }
-
-/* ---------- sidebar ---------- */
 
 .setup-sidebar {
   padding: 32px 22px 22px 26px;
@@ -67,8 +64,6 @@ window.bifluxvr-setup {
   opacity: 0.7;
 }
 
-/* ---------- pages ---------- */
-
 .page-title {
   font-size: 32px;
   font-weight: 800;
@@ -121,8 +116,6 @@ window.bifluxvr-setup {
   background: alpha(#5e5ce6, 0.14);
 }
 
-/* ---------- plan ---------- */
-
 .badge {
   font-size: 12px;
   font-weight: 700;
@@ -134,8 +127,6 @@ window.bifluxvr-setup {
 .badge-update  { background: alpha(#bf5af2, 0.18); color: #bf5af2; }
 .badge-skip    { background: alpha(#30d158, 0.16); color: #30d158; }
 .badge-fail    { background: alpha(#ff453a, 0.16); color: #ff453a; }
-
-/* ---------- installing ---------- */
 
 .current-task {
   padding: 16px 18px;
@@ -179,8 +170,6 @@ window.bifluxvr-setup {
 .log-expander title {
   font-weight: 600;
 }
-
-/* ---------- settings ---------- */
 
 .voice-preview {
   font-size: 13px;

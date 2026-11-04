@@ -1,12 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Lossless reader/writer for Valve's text KeyValues (.vdf/.acf) format.
-
-Documents are represented as lists of [key, value] pairs (value is a str or a
-nested list) so duplicate keys and ordering survive a round trip. Only the
-\\" and \\\\ escapes are interpreted; anything else is kept verbatim.
-"""
-
-
 class VDFError(ValueError):
     pass
 
@@ -91,7 +82,6 @@ def dumps(items, indent=0):
 
 
 def get(items, key, default=None):
-    """Case-insensitive lookup of the first matching key."""
     if not isinstance(items, list):
         return default
     low = key.lower()
@@ -110,7 +100,6 @@ def path(items, *keys):
 
 
 def ensure(items, key):
-    """Return the child block named `key`, creating it if needed."""
     low = key.lower()
     for pair in items:
         if pair[0].lower() == low and isinstance(pair[1], list):

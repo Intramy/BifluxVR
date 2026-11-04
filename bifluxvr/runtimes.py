@@ -1,7 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""OpenXR runtime discovery/activation and control of the streaming servers
-(WiVRn, Monado) that implement them."""
-
 import glob
 import json
 import os
@@ -21,7 +17,7 @@ class XRRuntime:
     name: str
     manifest: str
     library: str
-    kind: str  # wivrn | monado | steamvr | other
+    kind: str
     valid: bool
 
 
@@ -32,7 +28,6 @@ def _manifest_dirs():
     dirs.append("/etc/openxr/1")
     dirs += [os.path.join(d, "openxr", "1") for d in data]
     dirs.append(os.path.join(DATA_HOME, "openxr", "1"))
-    # Envision-built Monado/WiVRn prefixes
     dirs += glob.glob(os.path.join(DATA_HOME, "envision", "prefixes", "*", "share", "openxr", "1"))
     return dirs
 
@@ -58,7 +53,6 @@ def _load(manifest):
         return None
     if os.sep in lib and not os.path.isabs(lib):
         lib = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(manifest)), lib))
-    # Bare sonames are resolved by the loader's library search; trust them.
     valid = os.path.isfile(lib) if os.sep in lib else True
     name = rt.get("name") or os.path.splitext(os.path.basename(manifest))[0].replace("openxr_", "")
     return XRRuntime(name, manifest, lib, _kind(name, os.path.realpath(manifest)), valid)
@@ -88,7 +82,6 @@ def discover():
 
 
 def active():
-    """The runtime the OpenXR loader will pick, or None."""
     for p in [ACTIVE_LINK] + [
         os.path.join(d, "openxr", "1", "active_runtime.json")
         for d in (os.environ.get("XDG_CONFIG_DIRS") or "/etc/xdg").split(":")
@@ -110,8 +103,6 @@ def set_active(manifest):
     os.replace(tmp, ACTIVE_LINK)
 
 
-# ------------------------------------------------------------------ servers
-
 @dataclass
 class Server:
     kind: str
@@ -120,8 +111,8 @@ class Server:
     process: str
     dashboard: str = ""
     args: tuple = ()
-    manages_runtime: bool = False  # sets/removes active_runtime.json itself
-    flatpak: str = ""  # Flathub app id, used when there's no native binary
+    manages_runtime: bool = False
+    flatpak: str = ""
 
     @property
     def from_flatpak(self):
@@ -146,8 +137,6 @@ class Server:
         spawn_detached(argv, os.path.join(LOG_DIR, f"{self.binary}.log"))
 
     def stop(self, timeout=10.0):
-        """SIGTERM, wait for a graceful exit (WiVRn needs several seconds to
-        unpublish and tear down), then SIGKILL anything left."""
         terminate(pids_of(self.process))
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -160,7 +149,7 @@ class Server:
         if self.dashboard and shutil.which(self.dashboard):
             argv = [self.dashboard]
         elif self.dashboard and self.from_flatpak:
-            argv = ["flatpak", "run", self.flatpak]  # the app's default command is the dashboard
+            argv = ["flatpak", "run", self.flatpak]
         else:
             return False
         spawn_detached(argv, os.path.join(LOG_DIR, f"{self.dashboard}.log"))
@@ -168,7 +157,6 @@ class Server:
 
     @property
     def ipc_path(self):
-        """Socket the Steam Runtime container needs write access to."""
         return {
             "wivrn": "$XDG_RUNTIME_DIR/wivrn/comp_ipc",
             "monado": "$XDG_RUNTIME_DIR/monado_comp_ipc",
@@ -176,8 +164,6 @@ class Server:
 
 
 SERVERS = [
-    # --early-active-runtime: register as the OpenXR runtime as soon as the
-    # server is up, so games started before the headset connects find it.
     Server("wivrn", "WiVRn", "wivrn-server", "wivrn-server", "wivrn-dashboard",
            ("--early-active-runtime",), True, "io.github.wivrn.wivrn"),
     Server("monado", "Monado", "monado-service", "monado-service"),
@@ -192,7 +178,6 @@ def server_for(kind):
 
 
 def preferred_server():
-    """The server matching the active runtime, else the first installed one."""
     rt = active()
     if rt:
         s = server_for(rt.kind)
@@ -204,13 +189,10 @@ def preferred_server():
     return None
 
 
-# Every variable vr_env() may emit, for cleanly removing them again.
 ENV_KEYS = ("PRESSURE_VESSEL_IMPORT_OPENXR_1_RUNTIMES", "PRESSURE_VESSEL_FILESYSTEMS_RW")
 
 
 def vr_env(kind=None):
-    """Environment a Proton game needs to reach the native OpenXR runtime
-    from inside the Steam Linux Runtime container."""
     env = {"PRESSURE_VESSEL_IMPORT_OPENXR_1_RUNTIMES": "1"}
     if kind is None:
         rt = active()

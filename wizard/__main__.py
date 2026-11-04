@@ -1,4 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
 import platform
 import sys
 
@@ -16,10 +15,9 @@ def unsupported(name):
     return 1
 
 
-# Checked before anything Linux-only (GTK, /proc) is imported.
 if platform.system() in ("Windows", "Darwin") or platform.system().startswith(("CYGWIN", "MSYS", "MINGW")):
     sys.exit(unsupported({"Darwin": "macOS"}.get(platform.system(), "Windows")))
 
-from .app import main  # noqa: E402
+from .app import main
 
 sys.exit(main())

@@ -1,10 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Runs the installer's package-manager commands as root, so the user types
-their password once. Started through pkexec or sudo; reads the steps as a
-JSON line on stdin and reports progress as JSON lines on stdout.
-
-Only package managers may be run, whatever the steps say."""
-
 import json
 import os
 import shutil
@@ -42,7 +35,6 @@ def run(step):
 def main():
     if os.geteuid() != 0:
         sys.exit("must run as root")
-    # Through sudo, an unused password line may come first; the plan is the JSON line.
     plan = next(json.loads(line) for line in sys.stdin if line.startswith("{"))
     for step in plan["steps"]:
         say(id=step["id"], event="start")

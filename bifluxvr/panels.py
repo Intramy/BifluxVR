@@ -1,7 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""The per-game sections of a game's page: health check, ratings, mods and
-VR fixes, and controller remapping. Plus the self-update group in Settings."""
-
 import os
 import time
 from html import escape
@@ -29,17 +25,15 @@ def busy(btn, on=True):
     return btn
 
 
-# ------------------------------------------------------------------ health
-
 class HealthGroup(Adw.PreferencesGroup):
     def __init__(self, win, detail):
         super().__init__(title=t("Health Check", "Will it run?"),
                          description=t("Everything that decides whether this game starts in VR.",
-                                       "Poked every part this game needs. Here's the verdict."))
+                                       "Everything this game needs to start."))
         self.win, self.detail = win, detail
         self.rows = []
         self.set_header_suffix(button("", "flat", icon="view-refresh-symbolic", cb=self.reload,
-                                      tooltip=t("Check again", "Poke it again")))
+                                      tooltip=t("Check again", "Check Again")))
         self.reload()
 
     @property
@@ -48,7 +42,7 @@ class HealthGroup(Adw.PreferencesGroup):
 
     def reload(self):
         run_async(lambda: health.check_game(self.game, self.win.cfg), self._show,
-                  lambda e: self.win.toast(t(f"Health check failed: {e}", f"The health check tripped: {e}")))
+                  lambda e: self.win.toast(t(f"Health check failed: {e}", f"The health check failed: {e}")))
 
     def _show(self, checks):
         for row in self.rows:
@@ -76,7 +70,7 @@ class HealthGroup(Adw.PreferencesGroup):
             self.win.get_clipboard().set(anticheat.request_text(game, anticheat.lookup(game, False)))
             self.win.open_uri(f"https://steamcommunity.com/app/{appid}/discussions/0/")
             self.win.toast(t("A polite request is on your clipboard. Start a new discussion and paste it.",
-                             "Polite request copied. New discussion, paste, post. Make some noise."))
+                             "Request copied. Start a new discussion and paste it."))
         elif check.id == "game-dll":
             btn.set_sensitive(False)
             run_async(lambda: mods.sync_launch_options(game),
@@ -84,8 +78,6 @@ class HealthGroup(Adw.PreferencesGroup):
                                                   "Mod DLLs are in. They'll load now.")), self.reload()),
                       lambda e: (self.win.toast(str(e)), btn.set_sensitive(True)))
 
-
-# ----------------------------------------------------------------- ratings
 
 def protondb_row(win, game):
     row = Adw.ActionRow(title="ProtonDB", subtitle=t("Looking it up…", "Asking the internet…"))
@@ -122,10 +114,8 @@ def protondb_row(win, game):
 
 
 def perf_row(win, game):
-    """Roughly how well the game will run, from its Steam requirements and
-    this PC, corrected by what was measured while it was played."""
     row = Adw.ExpanderRow(title=t("Expected frame rate", "How smooth will it be?"),
-                          subtitle=t("Estimating…", "Doing some napkin math…"))
+                          subtitle=t("Estimating…", "Estimating…"))
     row.add_prefix(Gtk.Image(icon_name="power-profile-performance-symbolic"))
     appid = game.store_id
     if not win.cfg.get("online", True):
@@ -142,12 +132,12 @@ def perf_row(win, game):
     def show(est):
         if not est:
             row.set_subtitle(t("Its store page doesn't name a graphics card to compare with",
-                               "The store page doesn't say what GPU it wants. Mysterious."))
+                               "The store page doesn't say what GPU it wants. "))
             row.set_enable_expansion(False)
             return
         if "unknown_gpu" in est:
             row.set_subtitle(t(f"Your GPU ({est['unknown_gpu']}) isn't in BifluxVR's benchmark table yet",
-                               f"Never heard of your {est['unknown_gpu']}. Can't guess, sorry."))
+                               f"Don't know your {est['unknown_gpu']}, so no estimate."))
             row.set_enable_expansion(False)
             return
         fps = (f"{est['low']}–{est['high']} fps" if est["low"] != est["high"] else f"{est['fps']} fps")
@@ -155,9 +145,9 @@ def perf_row(win, game):
         badge.set_valign(Gtk.Align.CENTER)
         row.add_suffix(badge)
         kind = t("measured and estimated", "based on your sessions") if est["measured"] \
-            else t("estimate", "educated guess")
-        verdict = {"ok": t("smooth", "buttery"), "warn": t("some dropped frames", "a bit choppy"),
-                   "fail": t("well below the refresh rate", "rough ride, lower the settings")}[est["state"]]
+            else t("estimate", "estimate")
+        verdict = {"ok": t("smooth", "smooth"), "warn": t("some dropped frames", "a bit choppy"),
+                   "fail": t("well below the refresh rate", "rough, lower the settings")}[est["state"]]
         row.set_subtitle(t(f"{fps} of {est['refresh']} Hz · {verdict} · {kind}",
                            f"{fps} of {est['refresh']} Hz · {verdict} · {kind}"))
         for title, text in est["lines"]:
@@ -169,7 +159,7 @@ def perf_row(win, game):
                                  subtitle=t("Roughly ±25%. Many VR games list the same minimum card whether "
                                             "they are light or heavy, so play it once: BifluxVR measures the "
                                             "GPU load and corrects the estimate.",
-                                            "Give or take 25%. Lots of VR games copy-paste the same minimum GPU "
+                                            "Give or take 25%. Lots of VR games list the same minimum GPU "
                                             "whether they're light or heavy. Play it once and I'll measure the "
                                             "real thing."))
             note.set_subtitle_lines(4)
@@ -205,7 +195,6 @@ def rating_row(win, game):
 
 
 def store_row(win, game, detail):
-    """For non-Steam games: which Steam game this is, for art and ratings."""
     row = Adw.ActionRow(title=t("Steam match", "Steam twin"))
     row.set_subtitle(t(f"Steam app {game.store_id}", f"Looks like Steam app {game.store_id}") if game.store_id
                      else t("None. Art and ratings need one", "None yet. No art or ratings without one"))
@@ -224,8 +213,8 @@ def ask_store_id(win, game, detail):
                             body=t("The number in the game's store URL. Leave empty to clear.",
                                    "It's the number in the game's store page URL. Empty means no match."),
                             extra_child=lst)
-    alert.add_response("cancel", t("Cancel", "Nevermind"))
-    alert.add_response("save", t("Save", "That's the One"))
+    alert.add_response("cancel", t("Cancel", "Cancel"))
+    alert.add_response("save", t("Save", "Save"))
     alert.set_response_appearance("save", Adw.ResponseAppearance.SUGGESTED)
 
     def on_response(_d, resp):
@@ -238,20 +227,18 @@ def ask_store_id(win, game, detail):
     alert.present(win)
 
 
-# -------------------------------------------------------------------- mods
-
 class ModsGroup(Adw.PreferencesGroup):
     def __init__(self, win, detail):
         super().__init__(title=escape(t("Mods & VR Fixes", "Mods & VR fixes")),
                          description=t("Installed mods can be rolled back at any time. Replaced files are kept.",
-                                       "Install whatever. Every mod can be rolled back, the originals are kept safe."))
+                                       "Every mod can be rolled back. The originals are kept."))
         self.win, self.detail = win, detail
         self.rows = []
         self.unreal = False
         self.beat_saber = False
         self.set_header_suffix(button(t("Install…", "Add Mod…"), "flat", icon="list-add-symbolic",
                                       cb=self.pick_archive,
-                                      tooltip=t("Install a mod from a .zip or .rar", "Throw a mod .zip or .rar at it")))
+                                      tooltip=t("Install a mod from a .zip or .rar", "Install a mod .zip or .rar")))
         run_async(lambda: (mods.is_unreal(self.game), bool(beatsaber.game_root(self.game))), self._loaded)
 
     @property
@@ -290,7 +277,7 @@ class ModsGroup(Adw.PreferencesGroup):
         if asset and not any(m["name"].startswith("REFramework") for m in installed):
             row = Adw.ActionRow(title="REFramework VR",
                                 subtitle=t("praydog's mod with full 6DoF VR for this game",
-                                           "praydog's mod that turns this game into proper VR. Yes, really."))
+                                           "praydog's mod that turns this game into proper VR. "))
             row.add_prefix(Gtk.Image(icon_name="starred-symbolic"))
             btn = suffix_button(t("Install", "Get It"), "suggested-action")
             btn.connect("clicked", lambda b: self.install_reframework(b))
@@ -360,12 +347,11 @@ class ModsGroup(Adw.PreferencesGroup):
                                          tooltip=t("Delete the downloaded UEVR", "Delete UEVR")))
             row.add_suffix(suffix_button(t("Run Injector", "Inject"), "suggested-action", cb=self.run_uevr))
         else:
-            btn = suffix_button(t("Download", "Gimme"))
+            btn = suffix_button(t("Download", "Download"))
             btn.connect("clicked", lambda b: self.download_uevr(b))
             row.add_suffix(btn)
         return row
 
-    # -- actions
 
     def _changed(self, msg):
         self.win.toast(msg)
@@ -373,7 +359,6 @@ class ModsGroup(Adw.PreferencesGroup):
         self.detail.health.reload()
 
     def _sync_steam(self):
-        """Steam games read DLL overrides from their launch options."""
         if self.game.custom:
             return ""
         try:
@@ -386,8 +371,8 @@ class ModsGroup(Adw.PreferencesGroup):
     def confirm_rollback(self, mod):
         alert = Adw.AlertDialog(heading=t(f"Roll Back {mod['name']}?", f"Undo {mod['name']}?"),
                                 body=t("Its files are removed and the originals it replaced are put back.",
-                                       "Its files go, the originals come back. Like it never happened."))
-        alert.add_response("cancel", t("Cancel", "Nevermind"))
+                                       "Its files go, the originals come back. "))
+        alert.add_response("cancel", t("Cancel", "Cancel"))
         alert.add_response("undo", t("Roll Back", "Undo It"))
         alert.set_response_appearance("undo", Adw.ResponseAppearance.DESTRUCTIVE)
 
@@ -409,7 +394,7 @@ class ModsGroup(Adw.PreferencesGroup):
         def work():
             rec = mods.install_reframework(self.game)
             return rec, self._sync_steam()
-        run_async(work, lambda r: self._changed(t(f"{r[0]['name']} installed.", f"{r[0]['name']} is in. VR time.") + r[1]),
+        run_async(work, lambda r: self._changed(t(f"{r[0]['name']} installed.", f"{r[0]['name']} is in.") + r[1]),
                   lambda e: (self.win.toast(t(f"Install failed: {e}", f"That didn't work: {e}")), self.rebuild()))
 
     def install_beatmods(self, btn):
@@ -418,14 +403,14 @@ class ModsGroup(Adw.PreferencesGroup):
         def work():
             recs = beatsaber.install(self.game)
             return recs, self._sync_steam()
-        run_async(work, lambda r: self._changed(t(f"{len(r[0])} mods installed.", f"{len(r[0])} mods in. Go slice some customs.") + r[1]),
+        run_async(work, lambda r: self._changed(t(f"{len(r[0])} mods installed.", f"{len(r[0])} mods in. ") + r[1]),
                   lambda e: (self.win.toast(t(f"Install failed: {e}", f"That didn't work: {e}")), self.rebuild()))
 
     def remove_beatmods(self):
-        alert = Adw.AlertDialog(heading=t("Roll Back All BeatMods Mods?", "Back to vanilla?"),
+        alert = Adw.AlertDialog(heading=t("Roll Back All BeatMods Mods?", "Remove all mods?"),
                                 body=t("BSIPA, SongCore and their libraries are removed. Your songs stay.",
                                        "The mods go, your songs stay put."))
-        alert.add_response("cancel", t("Cancel", "Nevermind"))
+        alert.add_response("cancel", t("Cancel", "Cancel"))
         alert.add_response("undo", t("Roll Back", "Undo It"))
         alert.set_response_appearance("undo", Adw.ResponseAppearance.DESTRUCTIVE)
 
@@ -436,7 +421,7 @@ class ModsGroup(Adw.PreferencesGroup):
             def work():
                 beatsaber.remove(self.game)
                 return self._sync_steam()
-            run_async(work, lambda note: self._changed(t("BeatMods mods rolled back.", "Back to vanilla.") + note),
+            run_async(work, lambda note: self._changed(t("BeatMods mods rolled back.", "Mods removed.") + note),
                       lambda e: self.win.toast(t(f"Rollback failed: {e}", f"Couldn't undo it: {e}")))
         alert.connect("response", on_response)
         alert.present(self.win)
@@ -444,7 +429,7 @@ class ModsGroup(Adw.PreferencesGroup):
     def download_uevr(self, btn):
         busy(btn)
         run_async(mods.install_uevr, lambda _: self._changed(t("UEVR downloaded", "UEVR is ready to inject")),
-                  lambda e: (self.win.toast(t(f"Download failed: {e}", f"Download faceplanted: {e}")), self.rebuild()))
+                  lambda e: (self.win.toast(t(f"Download failed: {e}", f"Download failed: {e}")), self.rebuild()))
 
     def remove_uevr(self):
         mods.remove_uevr()
@@ -455,7 +440,7 @@ class ModsGroup(Adw.PreferencesGroup):
         proton = self.win.cfg.get("proton") or (protons[0][1] if protons else "")
         run_async(lambda: mods.run_in_prefix(self.game, mods.uevr_path(), proton),
                   lambda _: self.win.toast(t("Injector starting. Pick the game's process and press Inject.",
-                                             "Injector's coming up. Pick the game and smash Inject.")),
+                                             "Injector is opening. Pick the game and press Inject.")),
                   lambda e: self.win.toast(str(e)))
 
     def pick_archive(self):
@@ -489,7 +474,7 @@ class ModsGroup(Adw.PreferencesGroup):
                                 body=t(f"Files are copied into {target}. Anything they replace is backed up.",
                                        f"It goes into {target}. Anything it overwrites gets backed up first."),
                                 extra_child=lst)
-        alert.add_response("cancel", t("Cancel", "Nevermind"))
+        alert.add_response("cancel", t("Cancel", "Cancel"))
         alert.add_response("install", t("Install", "Do It"))
         alert.set_response_appearance("install", Adw.ResponseAppearance.SUGGESTED)
 
@@ -502,20 +487,16 @@ class ModsGroup(Adw.PreferencesGroup):
             def work():
                 rec = mods.install_archive(self.game, path, title, dll=overrides)
                 return rec, self._sync_steam() if overrides else ""
-            self.win.toast(t(f"Installing {title}…", f"Shoving {title} in…"), timeout=2)
+            self.win.toast(t(f"Installing {title}…", f"Installing {title}…"), timeout=2)
             run_async(work, lambda r: self._changed(t(f"{title} installed.", f"{title} is in.") + r[1]),
                       lambda e: self.win.toast(t(f"Install failed: {e}", f"That didn't work: {e}")))
         alert.connect("response", on_response)
         alert.present(self.win)
 
 
-# ---------------------------------------------------------------- controls
-
 class ControlsGroup(Adw.PreferencesGroup):
-    """Only shown for OpenVR games; filled once the game folder is searched."""
-
     def __init__(self, win, detail):
-        super().__init__(title=t("Controls", "Button shuffle"),
+        super().__init__(title=t("Controls", "Button remapping"),
                          description=t("Remaps the game's own Touch and Index bindings. Turn everything off to "
                                        "restore the originals.",
                                        "Swap buttons around. Turn it all off and the game's own setup comes back."))
@@ -551,7 +532,7 @@ class ControlsGroup(Adw.PreferencesGroup):
         game = self.detail.game
 
         def undo(e):
-            self.win.toast(t(f"Couldn't change the bindings: {e}", f"The buttons refused to move: {e}"))
+            self.win.toast(t(f"Couldn't change the bindings: {e}", f"Couldn't remap the buttons: {e}"))
             self.updating = True
             current = set(bindings.active(game))
             for k, row in self.switches.items():
@@ -559,18 +540,14 @@ class ControlsGroup(Adw.PreferencesGroup):
             self.updating = False
         run_async(lambda: bindings.apply(game, self.manifest, swaps),
                   lambda _: self.win.toast(t("Controls updated. Restart the game to use them.",
-                                             "Buttons shuffled. Restart the game to feel it.")
+                                             "Buttons remapped. Restart the game.")
                                            if swaps else t("Original controls restored", "Original buttons are back")),
                   undo)
 
 
-# ------------------------------------------------------------------ updates
-
 class UpdateGroup(Adw.PreferencesGroup):
-    """Settings: this copy's version, and checking for and installing a newer one."""
-
     def __init__(self, win):
-        super().__init__(title=t("BifluxVR Updates", "Upgrades, people"))
+        super().__init__(title=t("BifluxVR Updates", "Updates"))
         self.win, self.btn = win, None
         self.row = Adw.ActionRow(title=f"BifluxVR {__version__}")
         self.row.add_prefix(Gtk.Image(icon_name="software-update-available-symbolic"))
@@ -586,17 +563,17 @@ class UpdateGroup(Adw.PreferencesGroup):
         rel, state = selfupdate.found, selfupdate.state
         if state == "installed":
             self.row.set_subtitle(t(f"Version {rel['version']} is installed. Restart to use it.",
-                                    f"{rel['version']} is in. Restart and enjoy."))
+                                    f"{rel['version']} is in. Restart to use it."))
             self.btn = suffix_button(t("Restart", "Restart"), "suggested-action", cb=self.win.get_application().restart)
         elif rel:
             self.row.set_subtitle(t(f"Version {rel['version']} is available. Click for what's new.",
-                                    f"{rel['version']} is out! Click to see what changed."))
+                                    f"{rel['version']} is out. Click to see what changed."))
             self.row.set_activatable(True)
             self.row.connect("activated", self._open_notes)
-            self.btn = suffix_button(t("Update", "Gimme"), "suggested-action", cb=self.install)
+            self.btn = suffix_button(t("Update", "Download"), "suggested-action", cb=self.install)
         else:
-            self.row.set_subtitle(t("Up to date", "Freshest version there is") if state == "checked"
-                                  else t("Not checked yet", "Haven't peeked yet"))
+            self.row.set_subtitle(t("Up to date", "Up to date") if state == "checked"
+                                  else t("Not checked yet", "Not checked yet"))
             self.btn = suffix_button(t("Check for Updates", "Check Now"), cb=self.check)
         self.row.add_suffix(self.btn)
 
@@ -606,7 +583,7 @@ class UpdateGroup(Adw.PreferencesGroup):
     def check(self):
         busy(self.btn)
         run_async(selfupdate.check, lambda _: self.show(),
-                  lambda e: (self.win.toast(t(f"Couldn't check for updates: {e}", f"Update check tripped: {e}")),
+                  lambda e: (self.win.toast(t(f"Couldn't check for updates: {e}", f"Update check failed: {e}")),
                              self.show()))
 
     def install(self):
@@ -614,6 +591,6 @@ class UpdateGroup(Adw.PreferencesGroup):
         rel = selfupdate.found
 
         def progress(p):
-            GLib.idle_add(self.row.set_subtitle, t(f"Downloading… {p:.0%}", f"Downloading the goods… {p:.0%}"))
+            GLib.idle_add(self.row.set_subtitle, t(f"Downloading… {p:.0%}", f"Downloading… {p:.0%}"))
         run_async(lambda: selfupdate.install(rel, progress), lambda _: self.show(),
-                  lambda e: (self.win.toast(t(f"Update failed: {e}", f"Update faceplanted: {e}")), self.show()))
+                  lambda e: (self.win.toast(t(f"Update failed: {e}", f"Update failed: {e}")), self.show()))

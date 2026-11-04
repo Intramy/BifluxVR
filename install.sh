@@ -1,9 +1,4 @@
 #!/bin/sh
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-# Installs BifluxVR for the current user.
-# Usage: ./install.sh               the graphical installer (falls back to --files-only)
-#        ./install.sh --files-only  just copy the app into ~/.local (no root, no questions)
-#        ./install.sh --uninstall
 set -eu
 SRC=$(cd "$(dirname "$0")" && pwd)
 DATA=${XDG_DATA_HOME:-$HOME/.local/share}
@@ -39,8 +34,6 @@ sys.exit((Adw.get_major_version(), Adw.get_minor_version()) < (1, 7))
 PY
 }
 
-# The toolkit the installer and the app are built with, through the distro's
-# package manager. Everything else is the graphical installer's job.
 install_toolkit() {
     . /etc/os-release 2>/dev/null || true
     for id in ${ID:-} ${ID_LIKE:-}; do
@@ -89,7 +82,6 @@ cat > "$BIN/bifluxvr" <<SH
 exec python3 -c 'import sys; sys.path.insert(0, "$APP"); from bifluxvr.app import main; sys.exit(main())' "\$@"
 SH
 chmod +x "$BIN/bifluxvr"
-# The app id changed in 1.2.0; don't leave a second menu entry behind.
 rm -f "$DATA/applications/io.github.bifluxvr.BifluxVR.desktop" "$DATA/icons/hicolor/scalable/apps/io.github.bifluxvr.BifluxVR.svg"
 cp "$SRC/data/io.github.intramy.BifluxVR.desktop" "$DATA/applications/"
 cp "$SRC/data/io.github.intramy.BifluxVR.svg" "$DATA/icons/hicolor/scalable/apps/"

@@ -1,7 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Steam discovery: libraries, installed games, VR API detection, artwork,
-Proton builds and per-game launch options."""
-
 import glob
 import json
 import os
@@ -23,12 +19,10 @@ _ROOT_CANDIDATES = [
     "~/.var/app/com.valvesoftware.Steam/.local/share/Steam",
 ]
 
-# Runtimes, redistributables and tools that are not games.
 _TOOL_NAME = re.compile(
     r"^(Proton\b|Steam Linux Runtime|Steamworks Common|SteamVR\b|Steam Audio)", re.I
 )
 
-# Filenames (lowercase) that reveal which VR API a Windows build talks to.
 _MARKERS = {
     "openvr_api.dll": "openvr",
     "xrsdkopenvr.dll": "openvr",
@@ -38,7 +32,6 @@ _MARKERS = {
     "libovrplatform64_1.dll": "oculus",
     "libovrrt64_1.dll": "oculus",
 }
-# Unreal ships its VR plugins with every packaged game, VR or not.
 _ENGINE_BUNDLED = re.compile(r"[\\/]engine[\\/](binaries[\\/]thirdparty|plugins)[\\/]", re.I)
 
 SCAN_VERSION = 2
@@ -51,15 +44,17 @@ class Game:
     install_dir: str
     library: str = ""
     buildid: str = ""
-    vr_apis: list = field(default_factory=list)  # confident detections
-    vr_engine: list = field(default_factory=list)  # engine-bundled, maybe unused
+    vr_apis: list = field(default_factory=list)
+    vr_engine: list = field(default_factory=list)
     custom: bool = False
     exe: str = ""
-    mode: str = "vr"  # non-Steam games: "vr" or "simple" (flat, no VR setup)
-    store_id: str = ""  # Steam app this game is, for art and ratings (custom games: a guess)
-    prefix: str = ""  # custom games: their Wine prefix
-    playtime: int = 0  # minutes
-    last_played: int = 0  # unix time
+    mode: str = "vr"
+    store_id: str = ""
+    prefix: str = ""
+    playtime: int = 0
+    last_played: int = 0
+    kind: str = "game"
+    root: str = ""
 
     @property
     def is_vr(self):
@@ -152,8 +147,6 @@ def _load_cache():
 
 
 def scan_games():
-    """Return installed Steam games, newest VR detections included. Slow on a
-    cold cache (walks install dirs); call from a worker thread."""
     cache = _load_cache()
     new_cache, games = {}, []
     for lib in libraries():
@@ -187,8 +180,6 @@ def scan_games():
 
 
 def playtimes():
-    """{appid: (minutes, last played)} from Steam's own bookkeeping, taking the
-    largest value when several Steam accounts share this PC."""
     out = {}
     for cfg in _localconfigs():
         apps = vdf.path(_read_vdf(cfg) or [], "UserLocalConfigStore", "Software", "Valve", "Steam", "apps")
@@ -208,7 +199,6 @@ def playtimes():
 
 
 def artwork(appid, kind="library_600x900"):
-    """Locate cached library art (portrait poster, hero, header, logo)."""
     exts = (".png",) if kind == "logo" else (".jpg", ".png")
     for root in roots():
         lc = os.path.join(root, "appcache", "librarycache")
@@ -227,7 +217,6 @@ def artwork(appid, kind="library_600x900"):
 
 
 def proton_builds():
-    """[(display name, path to `proton` script)] newest-looking first."""
     found = {}
     dirs = []
     for lib in libraries():
@@ -253,7 +242,6 @@ def proton_builds():
 
 
 def compat_prefix(appid):
-    """The Wine prefix Steam made for a game, or "" if it never ran."""
     for lib in libraries():
         pfx = os.path.join(lib, "steamapps", "compatdata", str(appid), "pfx")
         if os.path.isdir(pfx):
@@ -267,8 +255,6 @@ def _prefix_version(text):
 
 
 def proton_for_prefix(pfx):
-    """The installed Proton build that last ran a prefix. A second program
-    only shares the game's wineserver when both use the same build."""
     try:
         with open(os.path.join(os.path.dirname(pfx), "version")) as f:
             want = f.read().strip()
@@ -283,8 +269,6 @@ def proton_for_prefix(pfx):
             continue
     return ""
 
-
-# ---------------------------------------------------------------- launch opts
 
 def _localconfigs():
     out = []
@@ -325,12 +309,9 @@ def get_launch_options(appid):
 
 
 def set_launch_options(appid, transform):
-    """Rewrite LaunchOptions for every local Steam user. `transform` maps the
-    old string to the new one. Steam must not be running (it rewrites the file
-    on exit). Returns the number of files changed."""
     if running():
-        raise RuntimeError(t("Quit Steam first — it overwrites its config on exit.",
-                             "Close Steam first. It overwrites its config on exit, the rascal."))
+        raise RuntimeError(t("Quit Steam first. It overwrites its config on exit.",
+                             "Close Steam first. It overwrites its config on exit."))
     changed = 0
     for cfg in _localconfigs():
         with open(cfg, encoding="utf-8") as f:
@@ -356,8 +337,6 @@ def set_launch_options(appid, transform):
 
 
 def merge_env(options, env, strip_keys=()):
-    """Prefix `env` (dict) onto a Steam launch option string idempotently,
-    first dropping any earlier value of `env`'s keys and `strip_keys`."""
     rest = strip_env(options, set(env) | set(strip_keys))
     prefix = " ".join(f"{k}={v}" for k, v in env.items())
     if not rest:

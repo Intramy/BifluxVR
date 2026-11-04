@@ -1,4 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
 import os
 import signal
 import subprocess
@@ -38,7 +37,6 @@ def atomic_write(path, text, mode=None):
 
 
 def pids_of(*names):
-    """PIDs owned by this user whose comm matches one of `names`."""
     out = []
     uid = os.getuid()
     for entry in os.listdir("/proc"):
@@ -49,13 +47,11 @@ def pids_of(*names):
                 continue
             with open(f"/proc/{entry}/comm") as f:
                 comm = f.read().strip()
-            # A zombie has exited and is only waiting to be reaped.
             with open(f"/proc/{entry}/stat") as f:
                 if f.read().rsplit(")", 1)[1].split()[0] in ("Z", "X"):
                     continue
         except (OSError, IndexError):
             continue
-        # comm is truncated to 15 chars by the kernel
         if any(comm == n[:15] for n in names):
             out.append(int(entry))
     return out
@@ -78,8 +74,6 @@ def process_running_any_user(*names):
 
 
 def spawn_detached(argv, log_path, **kw):
-    """Start a long-running child and reap it in the background when it exits,
-    so it never lingers as a zombie that looks like a live process."""
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     with open(log_path, "ab") as log:
         proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT,

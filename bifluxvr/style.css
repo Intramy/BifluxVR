@@ -1,5 +1,4 @@
-/* BifluxVR — Apple-inspired styling layered on libadwaita */
-
+/* UI */
 window.bifluxvr {
   font-family: "Inter Variable", "Inter", "SF Pro Display", "SF Pro Text", "Cantarell", sans-serif;
   font-feature-settings: "cv11", "ss01";
@@ -27,8 +26,6 @@ window.bifluxvr {
   opacity: 0.6;
 }
 
-/* ---------- sidebar ---------- */
-
 .navigation-sidebar row {
   border-radius: 10px;
   padding: 7px 10px;
@@ -55,8 +52,6 @@ window.bifluxvr {
   font-size: 13px;
 }
 
-/* ---------- status dots ---------- */
-
 .dot {
   min-width: 9px;
   min-height: 9px;
@@ -66,8 +61,6 @@ window.bifluxvr {
 .dot.warn { background: #ff9f0a; box-shadow: 0 0 8px alpha(#ff9f0a, 0.5); }
 .dot.fail { background: #ff453a; box-shadow: 0 0 8px alpha(#ff453a, 0.5); }
 .dot.info { background: #8e8e93; }
-
-/* ---------- hero ---------- */
 
 .hero-card {
   border-radius: 26px;
@@ -131,8 +124,6 @@ button.pill.glass {
 }
 button.pill.glass:hover { background: alpha(white, 0.3); }
 
-/* ---------- pipeline tiles ---------- */
-
 .tile {
   background: var(--card-bg-color);
   border-radius: 20px;
@@ -170,8 +161,6 @@ flowboxchild.card-child {
   background: none;
   outline: none;
 }
-
-/* ---------- library ---------- */
 
 .game-card {
   padding: 6px;
@@ -221,8 +210,6 @@ flowboxchild.card-child {
 .badge.oculus { background: alpha(#ff9f0a, 0.92); }
 .badge.blocked { background: alpha(#ff453a, 0.92); }
 
-/* ---------- game detail ---------- */
-
 .hero-image {
   border-radius: 24px;
   background-image: linear-gradient(135deg, #1c1c1e, #3a3a3c);
@@ -256,8 +243,6 @@ flowboxchild.card-child {
   color: alpha(currentColor, 0.3);
 }
 
-/* ---------- drop folder ---------- */
-
 .dropzone {
   border: 2px dashed alpha(currentColor, 0.2);
   border-radius: 26px;
@@ -274,8 +259,6 @@ flowboxchild.card-child {
   font-weight: 700;
   letter-spacing: -0.3px;
 }
-
-/* ---------- discord ---------- */
 
 @keyframes discord-sweep {
   from { background-position: -140px 0; }
@@ -295,8 +278,6 @@ button.pill.discord {
 button.pill.discord:hover { background-color: #6b77f5; animation: discord-sweep 1.2s ease-in-out; }
 button.pill.discord:active { background-color: #4752c4; }
 button.pill.discord.shine { animation: discord-sweep 1.2s ease-in-out; }
-
-/* ---------- donate ---------- */
 
 .donate-card {
   background: var(--card-bg-color);
@@ -341,19 +322,17 @@ button.pill.donate {
 .tier-energy button.donate   { background: #1f9d55; }
 .tier-energy button.donate:hover { background: #25ad5f; }
 
-.tier-support .donate-emoji   { background: alpha(#bf5af2, 0.15); }
-.tier-support .donate-amount  { color: #9b51e0; }
-.tier-support scale highlight { background: #bf5af2; }
-.tier-support button.donate   { background: #9b51e0; }
-.tier-support button.donate:hover { background: #a960ea; }
+.tier-lunch .donate-emoji   { background: alpha(#bf5af2, 0.15); }
+.tier-lunch .donate-amount  { color: #9b51e0; }
+.tier-lunch scale highlight { background: #bf5af2; }
+.tier-lunch button.donate   { background: #9b51e0; }
+.tier-lunch button.donate:hover { background: #a960ea; }
 
 .tier-updates .donate-emoji   { background: alpha(#0a84ff, 0.15); }
 .tier-updates .donate-currency { color: #0a6fd6; font-size: 20px; font-weight: 800; }
 .tier-updates button.donate   { background: #0a6fd6; }
 .tier-updates button.donate:hover { background: #1a7fe6; }
 .tier-updates button.donate-chip { padding: 4px 14px; }
-
-/* ---------- ratings, stats, notifications ---------- */
 
 .tier-badge {
   font-size: 11px;
@@ -387,8 +366,6 @@ menubutton.unread > button image {
   background: none;
 }
 
-/* ---------- first-start welcome ---------- */
-
 .welcome-icon {
   -gtk-icon-shadow: 0 14px 32px alpha(#5e5ce6, 0.45);
 }
@@ -409,8 +386,6 @@ menubutton.unread > button image {
   opacity: 0.8;
 }
 
-/* ---------- frame-rate estimate ---------- */
-
 .fps-badge {
   font-size: 12px;
   font-weight: 800;
@@ -421,3 +396,25 @@ menubutton.unread > button image {
 .fps-ok   { background: alpha(#30d158, 0.18); color: #30d158; }
 .fps-warn { background: alpha(#ff9f0a, 0.18); color: #ff9f0a; }
 .fps-fail { background: alpha(#ff453a, 0.18); color: #ff453a; }
+
+.tabs { margin-top: 10px; padding-bottom: 4px; }
+button.tab {
+  border-radius: 999px;
+  padding: 5px 14px;
+  min-height: 0;
+  font-weight: 600;
+  background: alpha(currentColor, 0.07);
+}
+button.tab:hover { background: alpha(currentColor, 0.12); }
+button.tab.on { background: var(--accent-bg-color); color: var(--accent-fg-color); }
+button.tab-new { background: none; opacity: 0.7; }
+.tab-rule { margin: 6px 2px; opacity: 0.4; }
+.menu-row { font-weight: 400; padding: 6px 12px; border-radius: 8px; }
+.menu-row label { min-width: 120px; }
+
+button.uninstall { color: var(--destructive-color); font-weight: 600; }
+button.uninstall:hover { background: alpha(var(--destructive-color), 0.12); }
+
+.queue-item { padding: 12px 14px; }
+.queue-name { font-weight: 600; font-size: 15px; }
+row.failed .caption-text { color: var(--error-color); opacity: 1; }

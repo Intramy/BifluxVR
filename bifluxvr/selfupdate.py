@@ -1,9 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""BifluxVR updating itself from GitHub releases.
-
-A release is any GitHub release whose tag is a version number (v1.2.0); its source tarball must have
-install.sh at the top, like this folder does."""
-
 import os
 import re
 import shutil
@@ -18,9 +12,8 @@ from .util import CACHE_DIR
 REPO = "Intramy/BifluxVR"
 STAGE = os.path.join(CACHE_DIR, "self-update")
 
-# What this run has learned, shared by the Settings row and the bell.
-found = None  # the newer release, from latest()
-state = ""  # "" | "checked" | "installed"
+found = None
+state = ""
 
 
 def enabled():
@@ -36,14 +29,12 @@ def newer(tag):
 
 
 def latest():
-    """The newest release as {version, notes, url, tarball}, or None when
-    this copy is already up to date."""
     if not REPO:
         return None
     try:
         rel = net.github_latest(REPO)
     except urllib.error.HTTPError as e:
-        if e.code == 404:  # nothing released yet
+        if e.code == 404:
             return None
         raise
     tag = rel.get("tag_name", "")
@@ -71,8 +62,6 @@ def _source_root(tmp):
 
 
 def install(release, progress=None):
-    """Download `release`, check it really is the version it claims, and run
-    its install.sh. The running app keeps the old code until it restarts."""
     global state
     os.makedirs(STAGE, exist_ok=True)
     archive = net.download(release["tarball"], os.path.join(STAGE, "release.tar.gz"), progress)

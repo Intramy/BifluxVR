@@ -1,7 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Whether a game's anti-cheat lets it run under Proton, from the community
-list at areweanticheatyet.com, with a scan of the game folder as fallback."""
-
 import os
 
 from . import net
@@ -10,11 +6,9 @@ from .voice import t
 
 SOURCE = "https://raw.githubusercontent.com/AreWeAntiCheatYet/AreWeAntiCheatYet/master/games.json"
 SITE = "https://areweanticheatyet.com"
-# Works on Linux everywhere, so not worth a mention.
 HARMLESS = {"VAC"}
 BLOCKED = {"Broken", "Denied"}
 
-# File or folder name prefixes → anti-cheat, for games the list doesn't know.
 _MARKERS = (
     (("easyanticheat",), "Easy Anti-Cheat"),
     (("battleye", "beservice"), "BattlEye"),
@@ -32,8 +26,6 @@ _db = None
 
 
 def database(online=True):
-    """{"steam": {appid: entry}, "name": {slug: entry}}. Without `online`, or
-    when the list can't be fetched, whatever was cached (maybe nothing)."""
     global _db
     if _db is not None:
         return _db
@@ -61,7 +53,6 @@ def lookup(game, online=True):
 
 
 def scan(root, max_depth=3):
-    """The anti-cheat shipped in a game folder, or ""."""
     if not root or not os.path.isdir(root):
         return ""
     base = root.rstrip(os.sep).count(os.sep)
@@ -77,8 +68,6 @@ def scan(root, max_depth=3):
 
 
 def blocked(game):
-    """True if the list says this game won't run. Uses only data already
-    loaded, so it's cheap enough for library cards."""
     if _db is None:
         return False
     hit = lookup(game, online=False)
@@ -86,8 +75,6 @@ def blocked(game):
 
 
 def verdict(game, online=True):
-    """(state, detail, entry) with state "ok", "warn", "fail" or "" when there's
-    no anti-cheat to talk about."""
     hit = lookup(game, online)
     if hit and hit["anticheats"]:
         ac = " + ".join(hit["anticheats"])
@@ -100,13 +87,13 @@ def verdict(game, online=True):
                            f"{ac}. Runs on Linux, just not officially"), hit
         if status == "Planned":
             return "warn", t(f"{ac}. The developer has said Linux support is coming",
-                             f"{ac}. The devs promised Linux support. Any day now."), hit
+                             f"{ac}. The devs have promised Linux support."), hit
         if status == "Denied":
             return "fail", t(f"{ac}. The developer blocks Linux on purpose, so online play won't work",
                              f"{ac}, and the devs block Linux on purpose. Online play is a no."), hit
         if status == "Broken":
             return "fail", t(f"{ac} isn't enabled for Proton, so it won't get past the anti-cheat",
-                             f"{ac} isn't switched on for Linux. It'll get kicked at the door."), hit
+                             f"{ac} isn't switched on for Linux. It won't get in."), hit
     if hit:
         return "", "", hit
     found = scan(game.install_dir if not game.custom else os.path.dirname(game.exe))

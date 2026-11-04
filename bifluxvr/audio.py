@@ -1,8 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Where the sound goes: into the headset while a game runs, back to the
-headphones or speakers when it stops. Talks to PipeWire/PulseAudio through
-pactl. WiVRn only adds its sink once a headset is connected."""
-
 import json
 import subprocess
 import threading
@@ -11,8 +6,8 @@ import time
 from .voice import t
 
 _lock = threading.Lock()
-_switched = False  # the output was moved to the headset by us
-_wanted = False  # a game is on and hasn't been given the headset yet
+_switched = False
+_wanted = False
 
 
 def _pactl(*args):
@@ -35,7 +30,6 @@ def _kind(sink):
 
 
 def sinks():
-    """[{name, title, kind}] with kind one of vr, headphones, speakers, other."""
     try:
         res = _pactl("-f", "json", "list", "sinks")
         data = json.loads(res.stdout or "[]")
@@ -60,8 +54,6 @@ def set_default(name):
 
 
 def back_target(preferred=""):
-    """The sink to return to after playing: the one picked in Settings if it
-    still exists, else headphones, then speakers, then anything not VR."""
     found = [s for s in sinks() if s["kind"] != "vr"]
     for s in found:
         if s["name"] == preferred:
@@ -71,8 +63,6 @@ def back_target(preferred=""):
 
 
 def to_headset(wait=120):
-    """Move the default output to WiVRn, waiting for the headset to connect.
-    Runs on a worker thread; returns the sink's title or ""."""
     global _switched, _wanted
     _wanted = True
     deadline = time.monotonic() + wait
@@ -90,8 +80,6 @@ def to_headset(wait=120):
 
 
 def restore(preferred=""):
-    """Undo to_headset(). Returns the title switched to, or "" if the output
-    wasn't ours to move."""
     global _switched, _wanted
     with _lock:
         _wanted = False

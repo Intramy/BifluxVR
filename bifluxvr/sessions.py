@@ -1,11 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Play sessions started from BifluxVR: how long, on which headset, at what
-bitrate, how hard the GPU worked, and how much battery it cost.
-
-A session is written to disk when it starts and checkpointed while it runs,
-so closing BifluxVR mid-game still leaves a record (ending at the last
-checkpoint) that recover() closes on the next start."""
-
 import json
 import os
 import subprocess
@@ -17,9 +9,9 @@ from . import wivrn
 from .util import APP_DATA_DIR, atomic_write
 
 PATH = os.path.join(APP_DATA_DIR, "sessions.json")
-BEAT = 15  # seconds between checkpoints
-MIN_LENGTH = 30  # shorter runs are crashes or misclicks, not sessions
-GPU_SAMPLES = 240  # GPU load samples kept per session (an hour at BEAT)
+BEAT = 15
+MIN_LENGTH = 30
+GPU_SAMPLES = 240
 _lock = threading.Lock()
 _watching = set()
 
@@ -64,7 +56,7 @@ def begin(game_key, name, vr=True):
 
 
 def checkpoint(sid):
-    from . import perf  # perf reads sessions too
+    from . import perf
     info = wivrn.status() or {}
     batt = wivrn.battery()
     load = perf.sample()
@@ -99,17 +91,13 @@ def finish(sid):
 
 
 def recover():
-    """Close sessions left open by an earlier run of BifluxVR."""
     def sweep(data):
         for sid in [k for k in data["open"] if k not in _watching]:
             _close(data, sid)
     _update(sweep)
 
 
-# ------------------------------------------------------------------ watching
-
 def steam_game_pids(appid):
-    """Steam wraps every game it starts in `reaper SteamLaunch AppId=<id>`."""
     token = f"AppId={appid}".encode()
     uid = os.getuid()
     out = []
@@ -133,11 +121,9 @@ def steam_game_running(appid):
 
 
 def watch(game, proc=None, vr=True, on_end=None):
-    """Record a session for `game` in the background. With `proc`, the session
-    lasts as long as that process; otherwise as long as Steam runs the game."""
     def run():
         if proc is None:
-            deadline = time.monotonic() + 180  # Steam may update the game first
+            deadline = time.monotonic() + 180
             while not steam_game_running(game.appid):
                 if time.monotonic() > deadline:
                     if on_end:
@@ -166,8 +152,6 @@ def watch(game, proc=None, vr=True, on_end=None):
     threading.Thread(target=run, daemon=True).start()
 
 
-# -------------------------------------------------------------------- stats
-
 def history():
     with _lock:
         data = _load()
@@ -189,7 +173,6 @@ def last_played_by_game():
 
 
 def summary(days=14):
-    """Totals for the Stats page."""
     sessions = history()
     now = time.time()
     week = [s for s in sessions if s["start"] > now - 7 * 86400]
@@ -217,6 +200,6 @@ def summary(days=14):
         "average": sum(lengths) / len(lengths) if lengths else 0,
         "games": sorted(per_game.values(), key=lambda g: -g["seconds"]),
         "daily": daily,
-        "drain": sum(drains) / len(drains) if drains else None,  # % per hour
+        "drain": sum(drains) / len(drains) if drains else None,
         "recent": sessions[:12],
     }

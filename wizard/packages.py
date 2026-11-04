@@ -1,11 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""What BifluxVR needs, and how each distribution provides it.
-
-plan() turns the system into a list of Items: per component, whether it is
-missing, outdated or current, and how it would be installed. System
-packages go through the distro's package manager (as one pkexec batch, see
-root_helper.py); the rest is per-user: Flatpak, downloads, BifluxVR itself."""
-
 import hashlib
 import os
 import re
@@ -30,7 +22,6 @@ def _flatpak_has(app):
                for d in (os.path.join(DATA_HOME, "flatpak"), "/var/lib/flatpak"))
 
 
-# key, title, why, detect, {manager: [alternative package lists]}, fallback
 COMPONENTS = [
     ("gtk", "GTK 4 & libadwaita", "The toolkit BifluxVR's window is built with.",
      lambda: True, {
@@ -97,8 +88,8 @@ class Item:
     key: str
     title: str
     why: str
-    method: str  # pkg | flatpak | zipapp | xrizer | bifluxvr | none
-    action: str  # install | update | skip | fail
+    method: str
+    action: str
     detail: str = ""
     packages: list = field(default_factory=list)
     needs_flatpak: bool = False
@@ -119,8 +110,6 @@ def _field(text, name):
 
 
 class Manager:
-    """Installed and candidate versions of a package, as the distro sees them."""
-
     def __init__(self, name):
         self.name = name
 
@@ -169,7 +158,7 @@ class Manager:
         if n == "emerge":
             out = _run(["emerge", "-pqu", "--color", "n", pkg])[1]
             return any(" U" in line.split("]")[0] for line in out.splitlines() if pkg in line)
-        return True  # apt's candidate is only different when it is newer
+        return True
 
     def commands(self, pkgs, update):
         n = self.name
@@ -232,8 +221,6 @@ def _native(mgr, key, title, why, detect, alts, fallback):
     return Item(key, title, why, "none", "fail",
                 f"No package for your distribution. Install {title} manually, then run the installer again.")
 
-
-# ------------------------------------------------------------ user-level parts
 
 UMU_REPO = "Open-Wine-Components/umu-launcher"
 UMU_DIR = os.path.join(DATA_HOME, "bifluxvr", "umu")
@@ -314,4 +301,3 @@ def plan(manager):
     items.append(_xrizer_item())
     items.append(_bifluxvr_item())
     return items
-

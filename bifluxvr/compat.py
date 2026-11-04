@@ -1,7 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Compatibility ratings and store data: ProtonDB tiers, the Steam app a
-non-Steam game most likely is, and cover art for games Steam didn't install."""
-
 import os
 import re
 import urllib.error
@@ -21,8 +17,6 @@ ART_FILES = {
 _protondb = net.Cache("protondb.json", 3 * 86400)
 _matches = net.Cache("store-match.json", 30 * 86400)
 
-# Release-group tags, site names and version strings that archive names carry
-# but store titles never do.
 _JUNK = re.compile(
     r"\[[^]]*]|\([^)]*\)|\bv?\d+(\.\d+){1,3}\w*\b|\bbuild\s*\d+\b|"
     r"\b\w*(rip|repack|-?gog|codex|plaza|skidrow|fitgirl|dodi|elamigos)\b|"
@@ -30,8 +24,6 @@ _JUNK = re.compile(
 
 
 def protondb(appid):
-    """{"tier", "confidence", "total", "trending"} or None if ProtonDB has
-    no reports. Raises OSError when offline."""
     key = str(appid)
     hit = _protondb.get(key)
     if hit is not None:
@@ -59,7 +51,6 @@ def clean_title(name):
 
 
 def store_match(name):
-    """The Steam app ID whose title best matches `name`, or ""."""
     title = clean_title(name)
     if not title:
         return ""
@@ -76,9 +67,6 @@ def store_match(name):
 
 
 def steam_twin(name):
-    """(appid, title) of the Steam game with exactly this title, or None.
-    Stricter than store_match: a wrong guess here would send people to buy
-    the wrong game. Misses aren't cached; Steam's search is moody."""
     title = clean_title(name)
     if not title:
         return None
@@ -86,8 +74,6 @@ def steam_twin(name):
     hit = _matches.get(key)
     if hit:
         return tuple(hit)
-    # Meta's store tends to tack "VR" onto titles that Steam doesn't, and
-    # Steam's search then finds nothing at all.
     bare = re.sub(r"\s*\bvr\b", "", title, flags=re.I).strip()
     want = _norm(bare)
     for term in dict.fromkeys((title, bare)):
@@ -108,7 +94,6 @@ def _art_path(appid, kind):
 
 
 def fetch_art(appid, kinds=("library_600x900",)):
-    """Download store artwork for a game Steam has no local copy of."""
     for kind in kinds:
         path = _art_path(appid, kind)
         miss = path + ".missing"
@@ -122,8 +107,6 @@ def fetch_art(appid, kinds=("library_600x900",)):
 
 
 def artwork(game, kind="library_600x900"):
-    """Local art for any library game: Steam's own cache first, then
-    whatever fetch_art() downloaded."""
     if not game.custom:
         art = steam.artwork(game.appid, kind)
         if art:

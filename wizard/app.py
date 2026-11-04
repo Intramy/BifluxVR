@@ -1,7 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""The BifluxVR installer window: welcome, your system, what gets installed,
-installing, and first settings."""
-
 import os
 import subprocess
 import sys
@@ -12,12 +8,12 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, GLib, Gtk, Pango  # noqa: E402
+from gi.repository import Adw, Gdk, GLib, Gtk, Pango
 
-from bifluxvr import config  # noqa: E402
-from bifluxvr.widgets import run_async  # noqa: E402
+from bifluxvr import config
+from bifluxvr.widgets import run_async
 
-from . import packages, report, runner, system  # noqa: E402
+from . import packages, report, runner, system
 
 APP_ID = "io.github.intramy.BifluxVR.Installer"
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -53,6 +49,7 @@ def page(title, subtitle, *children):
     return Gtk.ScrolledWindow(child=clamp, hscrollbar_policy=Gtk.PolicyType.NEVER, vexpand=True)
 
 
+# UI
 class Installer(Adw.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title="BifluxVR Setup", default_width=980, default_height=700)
@@ -98,7 +95,6 @@ class Installer(Adw.ApplicationWindow):
         self.show_step("welcome")
         run_async(system.detect, self._detected, self._detect_failed)
 
-    # ---------------------------------------------------------------- frame
 
     def _sidebar(self):
         side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, width_request=250)
@@ -158,7 +154,6 @@ class Installer(Adw.ApplicationWindow):
             self.start_install()
         self.show_step(target)
 
-    # -------------------------------------------------------------- welcome
 
     def _welcome(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, valign=Gtk.Align.CENTER,
@@ -193,7 +188,6 @@ class Installer(Adw.ApplicationWindow):
         self.scan_spin.set_visible(False)
         self.scan_text.set_label(f"Couldn't read your system: {e}")
 
-    # --------------------------------------------------------------- system
 
     def _system_page(self, info):
         found = Adw.PreferencesGroup(title="What the installer read",
@@ -239,7 +233,6 @@ class Installer(Adw.ApplicationWindow):
         return page("Here's what I found", "Everything below stays on this computer, except the report line "
                     "at the bottom if you leave it on.", found, sent, card)
 
-    # ----------------------------------------------------------------- plan
 
     def _plan_page(self):
         self.plan_group = Adw.PreferencesGroup()
@@ -285,7 +278,6 @@ class Installer(Adw.ApplicationWindow):
         if self.stack.get_visible_child_name() == "plan":
             self.show_step("plan")
 
-    # -------------------------------------------------------------- install
 
     def _install_page(self):
         self.current = Gtk.Box(spacing=12)
@@ -333,7 +325,6 @@ class Installer(Adw.ApplicationWindow):
                   lambda e: self._installed({"bifluxvr": f"installer crashed: {e}"}))
 
     def _ask_password(self, retry):
-        """Called from the install thread; blocks until the user answers."""
         done = threading.Event()
         answer = []
 
@@ -435,7 +426,6 @@ class Installer(Adw.ApplicationWindow):
         self.result.set_child(banner)
         self.show_step("install")
 
-    # ------------------------------------------------------------- settings
 
     def _settings_page(self):
         g = Adw.PreferencesGroup(title="Personality")

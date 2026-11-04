@@ -1,9 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Starting games: Steam titles through the Steam client, other Windows
-executables through umu-launcher (or Proton directly as a fallback), always
-inside the Steam Linux Runtime with the OpenXR runtime imported. And
-stopping them again."""
-
 import os
 import shutil
 import signal
@@ -13,7 +7,7 @@ from . import openvr, runtimes, sessions, steam
 from .voice import t
 from .util import APP_DATA_DIR, LOG_DIR, RUNTIME_DIR, slug, spawn_detached, terminate
 
-_procs = {}  # library key → process of a non-Steam game we started
+_procs = {}
 
 
 class LaunchError(RuntimeError):
@@ -21,15 +15,13 @@ class LaunchError(RuntimeError):
 
 
 def prepare(cfg):
-    """Make sure the VR stack is up before a game starts. Returns a list of
-    human-readable notes about what was done. Runs on a worker thread."""
     notes = []
     server = runtimes.preferred_server()
     if cfg.get("auto_start_server", True) and server and server.installed and not server.running:
         server.start()
         notes.append(t(f"Started {server.title}", f"woke up {server.title}"))
         if server.manages_runtime:
-            for _ in range(30):  # give it up to 3 s to register itself
+            for _ in range(30):
                 if runtimes.active():
                     break
                 time.sleep(0.1)
@@ -63,7 +55,7 @@ def launch_steam(appid):
     elif shutil.which("xdg-open"):
         _spawn(["xdg-open", url], os.environ.copy(), "steam")
     else:
-        raise LaunchError(t("Steam is not installed", "Steam isn't installed. Kind of a problem."))
+        raise LaunchError(t("Steam is not installed", "Steam isn't installed"))
 
 
 def _expand(env):
@@ -75,10 +67,9 @@ def default_prefix(name):
 
 
 def launch_custom(game, proton_dir, dll_overrides=""):
-    """Start a non-Steam game and return its process."""
     exe = game["exe"]
     if not os.path.isfile(exe):
-        raise LaunchError(t(f"{exe} no longer exists", f"{exe} vanished. Spooky."))
+        raise LaunchError(t(f"{exe} no longer exists", f"{exe} is gone"))
     prefix = game.get("prefix") or default_prefix(game["name"])
     os.makedirs(prefix, exist_ok=True)
     env = os.environ.copy()
@@ -86,7 +77,24 @@ def launch_custom(game, proton_dir, dll_overrides=""):
         env.update(_expand(runtimes.vr_env()))
     if dll_overrides:
         env["WINEDLLOVERRIDES"] = ";".join(filter(None, (env.get("WINEDLLOVERRIDES"), dll_overrides)))
+    argv = _wine_command(exe, prefix, proton_dir, env)
+    return _spawn(argv, env, slug(game["name"]), cwd=os.path.dirname(exe))
 
+
+def run_setup(path, prefix, proton_dir, name):
+    env = os.environ.copy()
+    env["WINEDLLOVERRIDES"] = ";".join(filter(None, (env.get("WINEDLLOVERRIDES"), "winemenubuilder.exe=d")))
+    target = path
+    if path.lower().endswith(".msi"):
+        target = os.path.join(prefix, "run-setup.bat")
+        windows = "Z:" + path.replace("/", "\\")
+        with open(target, "w") as f:
+            f.write(f'@echo off\r\nmsiexec /i "{windows}"\r\n')
+    argv = _wine_command(target, prefix, proton_dir, env)
+    return _spawn(argv, env, f"setup-{slug(name)}", cwd=os.path.dirname(path))
+
+
+def _wine_command(exe, prefix, proton_dir, env):
     if shutil.which("umu-run"):
         env["WINEPREFIX"] = prefix
         env["GAMEID"] = env.get("GAMEID", "umu-default")
@@ -99,12 +107,12 @@ def launch_custom(game, proton_dir, dll_overrides=""):
                                  "Install umu-launcher or pick a Proton version in Babel Fish"))
         roots = steam.roots()
         if not roots:
-            raise LaunchError(t("Proton needs a Steam installation", "Proton needs Steam installed. They're a package deal."))
+            raise LaunchError(t("Proton needs a Steam installation", "Proton needs Steam installed"))
         env.pop("WINEPREFIX", None)
         env["STEAM_COMPAT_DATA_PATH"] = prefix
         env["STEAM_COMPAT_CLIENT_INSTALL_PATH"] = roots[0]
         argv = [os.path.join(proton_dir, "proton"), "run", exe]
-    return _spawn(argv, env, slug(game["name"]), cwd=os.path.dirname(exe))
+    return argv
 
 
 def log_path(name):
@@ -123,7 +131,6 @@ def running(game):
 
 
 def _parents():
-    """{pid: parent pid} for this user's processes."""
     out = {}
     uid = os.getuid()
     for entry in os.listdir("/proc"):
@@ -141,14 +148,19 @@ def _parents():
 
 
 def stop(game):
-    """Kill the game outright, with its whole process tree. Sessions are no
-    use here: pressure-vessel and Wine start new ones. Orphans don't escape
-    the tree either, since pv-adverb and Steam's reaper adopt them."""
     if game.custom:
         proc = _procs.pop(game.appid, None)
         victims = {proc.pid} if proc else set()
     else:
         victims = set(sessions.steam_game_pids(game.appid))
+    _kill(victims)
+
+
+def kill_tree(pid):
+    _kill({pid})
+
+
+def _kill(victims):
     parents = _parents()
     grew = True
     while grew:

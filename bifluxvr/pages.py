@@ -1,6 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""The Headset and Stats pages."""
-
 import time
 from html import escape
 
@@ -16,7 +13,7 @@ ENCODER_NAMES = {"nvenc": "NVENC", "vaapi": "VA-API", "vulkan": "Vulkan Video", 
 
 def grade(name):
     return {
-        "excellent": (t("Excellent", "Chef's kiss"), "ok", "network-wireless-signal-excellent-symbolic"),
+        "excellent": (t("Excellent", "Great"), "ok", "network-wireless-signal-excellent-symbolic"),
         "good": (t("Good", "Solid"), "ok", "network-wireless-signal-good-symbolic"),
         "fair": (t("Fair", "Meh"), "warn", "network-wireless-signal-ok-symbolic"),
         "poor": (t("Poor", "Rough"), "fail", "network-wireless-signal-weak-symbolic"),
@@ -24,7 +21,6 @@ def grade(name):
 
 
 def _pick(row, state, icon=None):
-    """Swap the status dot (or icon) at the start of a row."""
     old = getattr(row, "_lead", None)
     if old:
         row.remove(old)
@@ -60,13 +56,13 @@ class HeadsetPage(Adw.PreferencesPage):
         head.add(box)
         self.add(head)
 
-        g = Adw.PreferencesGroup(title=t("Status", "Vital signs"))
+        g = Adw.PreferencesGroup(title=t("Status", "Status"))
         self.conn = _status_row(t("Connection", "Connection"))
         self.server_btn = Gtk.Button(valign=Gtk.Align.CENTER)
         self.server_btn.connect("clicked", lambda *_: self._start_server())
         self.conn.add_suffix(self.server_btn)
         self.battery = _status_row(t("Battery", "Juice"))
-        self.link = _status_row(t("Connection quality", "Wi-Fi vibes"))
+        self.link = _status_row(t("Connection quality", "Wi-Fi"))
         self.stream = _status_row(t("Stream", "The stream"))
         self.tracking = _status_row(t("Tracking", "Tracking"))
         for row in (self.conn, self.battery, self.link, self.stream, self.tracking):
@@ -80,7 +76,6 @@ class HeadsetPage(Adw.PreferencesPage):
         self.add(self.opt)
         run_async(self._detect, self._show_optimize)
 
-    # -- live status
 
     def poll(self):
         if self.polling:
@@ -119,7 +114,7 @@ class HeadsetPage(Adw.PreferencesPage):
         else:
             name = info["name"] or t("Headset", "Your headset")
             self.conn.set_subtitle(escape(name + (t(" · in a VR session", " · in VR right now") if info["session"] else
-                                                  t(" · connected", " · connected, chilling"))))
+                                                  t(" · connected", " · connected, idle"))))
             _pick(self.conn, "ok")
 
         live = bool(info and info["connected"])
@@ -160,7 +155,7 @@ class HeadsetPage(Adw.PreferencesPage):
                 parts.append(t("decodes ", "speaks ") + ", ".join(CODEC_NAMES.get(c, c) for c in info["codecs"]))
             self.stream.set_subtitle(" · ".join(parts) or t("No details yet", "Nothing to report yet"))
             _pick(self.stream, "ok")
-            feats = [n for k, n in (("hand_tracking", t("hands", "hands")), ("eye_tracking", t("eyes", "eyeballs")),
+            feats = [n for k, n in (("hand_tracking", t("hands", "hands")), ("eye_tracking", t("eyes", "eyes")),
                                     ("face_tracking", t("face", "face"))) if info[k]]
             self.tracking.set_subtitle(t("Head and controllers", "Head and controllers") +
                                        (" · " + ", ".join(feats) if feats else ""))
@@ -177,7 +172,6 @@ class HeadsetPage(Adw.PreferencesPage):
         if server:
             self.win.toggle_server(server, True)
 
-    # -- auto-optimize
 
     def _detect(self):
         gpu = optimize.gpu()
@@ -258,7 +252,7 @@ class HeadsetPage(Adw.PreferencesPage):
         try:
             wivrn.write_encoder(encoder, codec, depth)
         except OSError as e:
-            self.win.toast(t(f"Couldn't write the WiVRn config: {e}", f"WiVRn's config said no: {e}"))
+            self.win.toast(t(f"Couldn't write the WiVRn config: {e}", f"Couldn't change WiVRn's config: {e}"))
             return
         server = runtimes.server_for("wivrn")
         msg = t(f"WiVRn will use {ENCODER_NAMES[encoder]} {CODEC_NAMES[codec]}",
@@ -276,7 +270,7 @@ class HeadsetPage(Adw.PreferencesPage):
         rec, available = self.rec, self.available
         w, h = int(w * rec["scale"]), int(h * rec["scale"])
         run_async(lambda: optimize.find_working(rec, available, w, h), self._show_results,
-                  lambda e: self.win.toast(t(f"Test failed: {e}", f"The test fell over: {e}")))
+                  lambda e: self.win.toast(t(f"Test failed: {e}", f"The test failed: {e}")))
 
     def _show_results(self, results):
         if results is not self.results:
@@ -318,11 +312,7 @@ class HeadsetPage(Adw.PreferencesPage):
             self.result_rows.append(row)
 
 
-# -------------------------------------------------------------------- stats
-
 class DailyChart(Gtk.DrawingArea):
-    """Minutes played per day as thin bars, newest on the right."""
-
     HEIGHT = 140
 
     def __init__(self):
@@ -345,7 +335,7 @@ class DailyChart(Gtk.DrawingArea):
         accent = Adw.StyleManager.get_default().get_accent_color_rgba()
         top = max(max(self.values), 1)
         slot = self._slot(width)
-        bar = min(slot - 2, 22)  # 2px gap between bars
+        bar = min(slot - 2, 22)
         base = height - 1
         cr.set_source_rgba(rgba.red, rgba.green, rgba.blue, 0.15)
         cr.rectangle(0, base, width, 1)
@@ -425,10 +415,10 @@ class StatsPage(Gtk.Box):
     def _show(self, s):
         self.tiles.remove_all()
         for value, caption in (
-            (duration(s["total"]), t("Total in VR", "Total face time")),
+            (duration(s["total"]), t("Total in VR", "Total time in VR")),
             (duration(s["week"]), t("This week", "This week")),
             (str(s["count"]), t("Sessions", "Sessions")),
-            (duration(s["longest"]), t("Longest session", "Longest marathon")),
+            (duration(s["longest"]), t("Longest session", "Longest session")),
             (f"{s['drain']:.0f}%/h" if s["drain"] is not None else "–",
              t("Battery use per hour", "Battery drain per hour")),
         ):

@@ -1,10 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Games bought on Meta's PC store, downloaded straight from Meta.
-
-BifluxVR never sees a password. The user signs in on Meta's own site and
-hands over the session token from its cookie; it stays in a private file
-and is only ever sent back to Meta."""
-
 import hashlib
 import http.client
 import io
@@ -31,7 +24,6 @@ OWNED_DOC = "4850747515044496"
 TOKEN_PATH = os.path.join(APP_CONFIG_DIR, "meta-token")
 MANIFESTS = os.path.join(CACHE_DIR, "meta")
 
-# What a game's files say about whether it can run here.
 OPENXR, DRM, OCULUS, UNKNOWN = "openxr", "drm", "oculus", "unknown"
 
 
@@ -76,13 +68,11 @@ def _open(url, data=None, timeout=60):
     except urllib.error.HTTPError as e:
         if e.code in (400, 401, 403):
             raise LoginNeeded(t("Meta didn't accept the login. Sign in again.",
-                                "Meta forgot who you are. Sign in again.")) from None
+                                "Your Meta session ended. Sign in again.")) from None
         raise
 
 
 def owned():
-    """PC games on the account: [{"id", "name", "canonical", "binary", "version_code"}]
-    and how many Quest-only items were skipped."""
     tok = token()
     if not tok:
         raise LoginNeeded(t("Not signed in", "Not signed in"))
@@ -91,7 +81,7 @@ def owned():
         data = json.load(r)
     if data.get("errors") and not data.get("data"):
         raise LoginNeeded(t("Meta didn't accept the login. Sign in again.",
-                            "Meta forgot who you are. Sign in again."))
+                            "Your Meta session ended. Sign in again."))
     nodes = (((data.get("data") or {}).get("viewer") or {}).get("user") or {}) \
         .get("active_entitlements", {}).get("nodes", [])
     games, skipped = [], 0
@@ -109,7 +99,6 @@ def owned():
 
 
 def manifest(game):
-    """The build's file list. Cached, since a build never changes."""
     path = os.path.join(MANIFESTS, f"{game['binary']}.json")
     try:
         with open(path) as f:
@@ -124,7 +113,7 @@ def manifest(game):
     try:
         m = json.loads(zipfile.ZipFile(io.BytesIO(blob)).read("manifest.json"))
     except (zipfile.BadZipFile, KeyError, ValueError):
-        raise MetaError(t("Meta sent an unreadable file list", "Meta sent gibberish instead of a file list")) from None
+        raise MetaError(t("Meta sent an unreadable file list", "Meta didn't send a usable file list")) from None
     atomic_write(path, json.dumps(m))
     return _note_platform(game, m, path)
 
@@ -134,10 +123,6 @@ def _base_names(m):
 
 
 def _note_platform(game, m, path):
-    """Whether the game's code uses Meta's platform library. The library itself
-    ships with the Meta app, so the game's own files often don't include it, but
-    a Unity build names its assemblies in one small file. A failed lookup isn't
-    saved, so the next visit tries again."""
     if "platform" in m:
         return m
     used = "oculus.platform.dll" in _base_names(m)
@@ -172,9 +157,6 @@ _local = threading.local()
 
 
 def _segment(binary, sha):
-    """One compressed chunk. Each download thread keeps its connection to
-    the CDN open: a game is thousands of small files, and a fresh TLS
-    handshake per chunk would cost more than the chunk itself."""
     path = "/binaries/segment/?" + urllib.parse.urlencode(
         {"access_token": token(), "binary_id": binary, "segment_sha256": sha})
     for attempt in range(3):
@@ -193,7 +175,7 @@ def _segment(binary, sha):
             continue
         if r.status in (400, 401, 403):
             raise LoginNeeded(t("Meta didn't accept the login. Sign in again.",
-                                "Meta forgot who you are. Sign in again."))
+                                "Your Meta session ended. Sign in again."))
         if r.status != 200:
             raise MetaError(f"Meta answered {r.status} {r.reason}")
         return zlib.decompress(body)
@@ -215,9 +197,6 @@ def _sha256(path):
 
 
 def download(game, dest, progress=None, cancel=None, workers=12):
-    """Fetch every file of the game's build into `dest`. Files already there
-    and intact are kept, so a stopped download picks up where it left off.
-    Returns the path of the game's .exe."""
     m = manifest(game)
     files = m.get("files", {})
     total = size(m)
@@ -226,7 +205,7 @@ def download(game, dest, progress=None, cancel=None, workers=12):
     free = shutil.disk_usage(dest).free
     if total - have > free:
         raise MetaError(t(f"Not enough space: needs {(total - have) / 1e9:.1f} GB, {free / 1e9:.1f} GB free",
-                          f"Your disk is full-ish: needs {(total - have) / 1e9:.1f} GB, only {free / 1e9:.1f} GB free"))
+                          f"Not enough space: needs {(total - have) / 1e9:.1f} GB, only {free / 1e9:.1f} GB free"))
     cancel = cancel or threading.Event()
     lock = threading.Lock()
     done = [0]
@@ -271,7 +250,7 @@ def download(game, dest, progress=None, cancel=None, workers=12):
         for job in jobs:
             try:
                 job.result()
-            except Exception as e:  # noqa: BLE001 — the first real cause is re-raised below
+            except Exception as e:
                 cancel.set()
                 errors.append(e)
     if errors:

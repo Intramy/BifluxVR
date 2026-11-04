@@ -1,8 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""What the PC can learn about a connected standalone headset: WiVRn's D-Bus
-properties, the battery (via adb or the server log) and how healthy the
-Wi-Fi link is."""
-
 import glob
 import json
 import os
@@ -22,7 +17,6 @@ DEFAULT_PORT = 9757
 
 
 def status():
-    """WiVRn's view of the headset, or None when the server isn't on the bus."""
     try:
         bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
         reply = bus.call_sync(BUS_NAME, OBJECT_PATH, "org.freedesktop.DBus.Properties", "GetAll",
@@ -35,7 +29,7 @@ def status():
         "connected": props.get("HeadsetConnected", False),
         "session": props.get("SessionRunning", False),
         "name": props.get("SystemName", ""),
-        "bitrate": props.get("Bitrate", 0),  # bit/s
+        "bitrate": props.get("Bitrate", 0),
         "refresh": props.get("PreferredRefreshRate", 0.0),
         "refresh_rates": list(props.get("AvailableRefreshRates", [])),
         "codecs": list(props.get("SupportedCodecs", [])),
@@ -45,8 +39,6 @@ def status():
         "pairing": props.get("PairingEnabled", False),
     }
 
-
-# ------------------------------------------------------------------ battery
 
 _LOG_BATTERY = re.compile(r"Battery: HMD: ([\d.]+)")
 _LOG_CHARGING = re.compile(r"Charging: HMD: (\w+)")
@@ -64,12 +56,10 @@ def _adb_battery():
     if not level:
         return None
     state = re.search(r"^\s*status: (\d+)", out, re.M)
-    # BatteryManager: 2 = charging, 5 = full
     return int(level.group(1)), bool(state and state.group(1) in ("2", "5")), "adb"
 
 
 def _log_battery():
-    """WiVRn logs the headset battery when it's started with verbose logging."""
     try:
         with open(os.path.join(LOG_DIR, "wivrn-server.log"), "rb") as f:
             f.seek(0, os.SEEK_END)
@@ -86,11 +76,8 @@ def _log_battery():
 
 
 def battery():
-    """(percent, charging, source) or None if nothing reports it."""
     return _adb_battery() or _log_battery()
 
-
-# ------------------------------------------------------------------ network
 
 def _port():
     try:
@@ -104,7 +91,6 @@ def _hex_ip(text):
     raw = bytes.fromhex(text)
     if len(raw) == 4:
         return ".".join(str(b) for b in reversed(raw))
-    # /proc stores IPv6 as four little-endian 32-bit words
     words = [raw[i:i + 4][::-1] for i in range(0, 16, 4)]
     addr = b"".join(words)
     if addr[:12] == b"\0" * 10 + b"\xff\xff":
@@ -113,8 +99,6 @@ def _hex_ip(text):
 
 
 def headset_address():
-    """IP of the headset WiVRn is talking to, found from the server's own
-    established TCP connection."""
     pids = pids_of("wivrn-server")
     if not pids:
         return ""
@@ -142,9 +126,6 @@ def headset_address():
 
 
 def link_quality(address, count=6):
-    """Ping the headset: {"avg", "jitter", "loss", "grade"}. Quest Wi-Fi power
-    saving adds a few ms on an idle link, so this is pessimistic until a
-    game is streaming."""
     if not address or not shutil.which("ping"):
         return None
     try:
@@ -171,8 +152,6 @@ def link_quality(address, count=6):
     return {"avg": avg, "jitter": jitter, "loss": loss, "grade": grade}
 
 
-# ------------------------------------------------------------------- config
-
 def read_config():
     try:
         with open(WIVRN_CONFIG) as f:
@@ -183,8 +162,6 @@ def read_config():
 
 
 def write_encoder(encoder, codec, bit_depth=8):
-    """Set the encoder WiVRn uses for every stream. The previous file is kept
-    next to it. The server picks this up on its next start."""
     cfg = read_config()
     if os.path.exists(WIVRN_CONFIG):
         shutil.copy2(WIVRN_CONFIG, f"{WIVRN_CONFIG}.bifluxvr-{time.strftime('%Y%m%d-%H%M%S')}.bak")

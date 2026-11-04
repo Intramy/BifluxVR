@@ -1,18 +1,7 @@
-// Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-// BifluxVR install-report relay (Cloudflare Worker).
-//
-// The installer never sees the Discord webhook: it talks to this worker,
-// which keeps the webhook as a secret, hands out user numbers, and edits one
-// Discord message per install from INSTALLING to SUCCESSFUL or FAILED.
-//
-// Bindings (see relay/README.md):
-//   WEBHOOK      secret  the Discord webhook URL
-//   SIGNING_KEY  secret  any long random string
-//   REPORTS      KV namespace
 
 const FIELD = /[^\p{L}\p{N} .,:;()\[\]+_\/-]/gu;
-const LIMIT = 5; // starts per IP per window
-const WINDOW = 600; // seconds
+const LIMIT = 5;
+const WINDOW = 600;
 
 function clean(value, max = 80) {
   return String(value ?? "").replace(FIELD, "").replace(/\s+/g, " ").trim().slice(0, max) || "unknown";
@@ -39,8 +28,6 @@ async function discord(env, method, path, content) {
   if (!r.ok) throw new Error(`discord ${r.status}`);
   return method === "POST" ? (await r.json()).id : null;
 }
-
-// The raw IP is never stored or forwarded: only a keyed hash, for 10 minutes.
 async function limited(env, request) {
   const ip = request.headers.get("CF-Connecting-IP") || "";
   const key = "rl:" + (await hmac(env.SIGNING_KEY, ip)).slice(0, 32);
@@ -52,7 +39,6 @@ async function limited(env, request) {
 
 async function start(env, body) {
   let count = parseInt(body.count, 10);
-  // A returning machine keeps its number if it can prove it was given it.
   if (!(count > 0 && body.token === (await hmac(env.SIGNING_KEY, `user:${count}`)))) {
     count = parseInt((await env.REPORTS.get("count")) || "0", 10) + 1;
     await env.REPORTS.put("count", String(count));
@@ -68,7 +54,7 @@ async function finish(env, body) {
   const key = `run:${clean(body.run, 40)}`;
   const run = JSON.parse((await env.REPORTS.get(key)) || "null");
   if (!run) return null;
-  await env.REPORTS.delete(key); // each run reports its result once
+  await env.REPORTS.delete(key);
   const status = body.ok ? "SUCCESSFUL" : `FAILED: ${clean(body.reason, 300)}`;
   await discord(env, "PATCH", `/messages/${run.message}`, line(run, status));
   return { ok: true };

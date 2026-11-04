@@ -12,7 +12,7 @@ Additional terms under section 7 of the GNU GPL version 3
 These apply to every file in this repository unless a file says otherwise.
 
 (a) Attribution, under section 7(b). Copies and modified versions must keep the
-    copyright notices above and in the source files, and must keep a visible
+    copyright notice above, and must keep a visible
     credit wherever the program shows its own credits, such as its main window
     and About dialog. Unmodified copies keep "Made by intramy". Modified
     versions say "Based on BifluxVR, made by intramy".

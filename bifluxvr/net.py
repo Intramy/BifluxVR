@@ -1,7 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""The few HTTP calls BifluxVR makes, with a small on-disk cache so pages
-don't hit the network every time they open."""
-
 import json
 import os
 import threading
@@ -35,8 +31,6 @@ def github_releases(repo, count=5):
 
 
 def download(url, dest, progress=None, timeout=60):
-    """Fetch `url` into `dest` via a temporary file, so a failed download
-    never leaves a half-written file behind."""
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     tmp = dest + ".part"
     try:
@@ -61,8 +55,6 @@ def quote(text):
 
 
 class Cache:
-    """A JSON file of {key: [timestamp, value]} entries that expire."""
-
     def __init__(self, name, max_age):
         self.path = os.path.join(CACHE_DIR, name)
         self.max_age = max_age

@@ -40,9 +40,11 @@ every frame.
 - **It tells you what's wrong before you strap in.** Health checks come with
   one-click fixes, and each game gets its own check, ProtonDB rating, anti-cheat
   warning and frame-rate estimate.
-- **Your games, wherever they came from.** It finds your Steam library, takes any
-  Windows `.exe`, unpacks game archives from the Drop Folder, and downloads the
-  PC games your Meta account owns.
+- **Your games and apps, wherever they came from.** It finds your Steam library,
+  takes any Windows `.exe`, unpacks archives, runs installers in their own Wine
+  prefix from the Yeet Zone, and downloads the PC games your Meta account owns.
+- **Folders and a real Uninstall.** Sort The Pile into your own folders, and remove
+  anything from its page along with its saves.
 - **Mods without the fear.** Install any `.zip` or `.rar` mod and roll it back
   later. Beat Saber custom songs take one click, and REFramework and UEVR are
   offered where they apply.
@@ -134,7 +136,8 @@ Questions, bugs or a game that just started working?
   theme (the sun/moon button at the top of the sidebar switches quickly), and
   **Serious mode**. By default the app talks like a human with jokes; Serious
   mode switches every label and message to plain, professional wording.
-- **Drop Folder**: drop game `.zip` or `.rar` files (or choose them). RAR needs
+- **Drop Folder**: drop game `.zip`, `.rar` or `.7z` files, or `.exe` and `.msi`
+  installers (or choose them, or search a folder by name). RAR needs
   `unrar` for full support, including solid and multi-part archives (drop any
   part and BifluxVR starts from part 1); `bsdtar` works as a basic fallback.
   Password-protected archives aren't supported. Unpack those yourself and add
@@ -189,7 +192,7 @@ Run without installing: `python3 -m bifluxvr` from this directory.
 ### Publishing updates
 
 The updater reads GitHub releases. To ship a version, bump `__version__` in `bifluxvr/__init__.py`,
-push, and publish a GitHub release tagged with the same number (`v1.2.0`).
+push, and publish a GitHub release tagged with the same number (`v1.3.0`).
 GitHub's source tarball is what gets installed, so nothing needs uploading.
 
 The expenses bar reads `funding.json` from the `main` branch. Edit and push it
@@ -250,7 +253,8 @@ Like any web request, these show your IP address to the service you reach.
 | `~/.local/share/bifluxvr/mods/` | Installed mod records and the original files they replaced |
 | `~/.local/share/bifluxvr/tools/` | Downloaded UEVR and REFramework |
 | Game folders | Only when you install a mod or remap buttons; both can be undone |
-| `~/Games/BifluxVR/{VR,Simple}` (default) | Games installed from the Drop Folder |
+| `~/Games/BifluxVR/{VR,Simple}` (default) | Archives unpacked from the Yeet Zone |
+| `~/Games/BifluxVR/Installed/<name>/` (default) | Anything put there by an installer, along with its own Wine prefix and saves. Uninstall deletes the whole folder |
 
 ## Unofficial
 

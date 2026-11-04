@@ -1,7 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Streaming settings that suit this PC: which encoders WiVRn can use here,
-what to ask of them, and a quick synthetic encode test to back it up."""
-
 import os
 import re
 import shutil
@@ -11,7 +7,6 @@ import time
 from . import health
 from .voice import t
 
-# Per-eye panel resolution, matched against WiVRn's SystemName.
 HEADSETS = [
     ("quest 3s", 1832, 1920),
     ("quest 3", 2064, 2208),
@@ -33,7 +28,6 @@ _wivrn_cache = {}
 
 
 def gpu():
-    """{"vendor", "name", "vram"} of the first GPU; vram in MiB, 0 if unknown."""
     cards = health.gpus()
     vendor = cards[0][0] if cards else "Unknown"
     info = {"vendor": vendor, "name": f"{vendor} GPU", "vram": 0}
@@ -68,8 +62,6 @@ def gpu():
 
 
 def wivrn_encoders():
-    """Encoders this WiVRn build was compiled with, read off the binary
-    itself since distros toggle nvenc/vaapi at build time."""
     exe = shutil.which("wivrn-server")
     if not exe:
         return []
@@ -115,7 +107,6 @@ def tier(info):
 
 
 def recommend(info, available, headset=None):
-    """The settings to suggest, with the reasons shown next to them."""
     headset = headset or {}
     codecs = headset.get("codecs") or ["h264", "h265", "av1"]
     level = tier(info)
@@ -149,7 +140,7 @@ def recommend(info, available, headset=None):
         notes.append(_rebuild_hint(hw))
     if encoder == "x264":
         notes.append(t("Software encoding uses a lot of CPU and adds latency. Keep the resolution modest.",
-                       "Your CPU is doing the video encoding by hand. It's trying its best. Go easy on it."))
+                       "Your CPU is doing the video encoding. Keep the settings low."))
     return {
         "encoder": encoder, "codec": codec, "bit_depth": 10 if deep else 8,
         "bitrate": bitrate, "scale": scale, "refresh": round(refresh), "tier": level, "notes": notes,
@@ -165,17 +156,11 @@ def _rebuild_hint(hw):
     else:
         how = t(f"install a WiVRn package built with {name}", f"grab a WiVRn build that has {name} in it")
     return t(f"This WiVRn build has no {name} support, so your GPU's best encoder sits unused. To fix it, {how}.",
-             f"Your WiVRn was built without {name}, so your GPU's best encoder is just sitting there. "
+             f"Your WiVRn was built without {name}, so your GPU's best encoder goes unused. "
              f"To fix it, {how}.")
 
 
 def test_encode(encoder, codec, width, height, fps, seconds=3):
-    """Encode synthetic video at the headset's per-eye size and report the
-    frame rate reached. WiVRn encodes each eye as its own stream, so a
-    90 Hz session needs about 180 frames per second from the encoder.
-
-    This is ffmpeg's encoder, not WiVRn's, and test patterns compress more
-    easily than games, so treat the result as a rough guide."""
     if not shutil.which("ffmpeg"):
         raise RuntimeError(t("ffmpeg is needed for the stream test", "Install ffmpeg and I'll run the test"))
     name = FFMPEG_CODECS.get(encoder, {}).get(codec)
@@ -202,13 +187,13 @@ def test_encode(encoder, codec, width, height, fps, seconds=3):
     try:
         proc = subprocess.run(argv, capture_output=True, text=True, timeout=60)
     except subprocess.TimeoutExpired:
-        raise RuntimeError(t("The encoder test took too long", "The encoder fell asleep mid-test")) from None
+        raise RuntimeError(t("The encoder test took too long", "The encoder stalled during the test")) from None
     elapsed = time.monotonic() - start
     if proc.returncode != 0:
         why = next((re.sub(r"^\[[^]]*]\s*", "", line) for line in proc.stderr.splitlines() if line.strip()),
                    "unknown error")
         raise RuntimeError(t(f"{name} isn't usable on this GPU ({why})",
-                             f"{name} said no ({why}). Your GPU probably can't do that one."))
+                             f"{name} failed ({why}). Your GPU probably can't do that one."))
     achieved = frames / elapsed
     needed = fps * 2
     return {"encoder": name, "size": f"{w}×{h}", "fps": achieved, "needed": needed,
@@ -216,7 +201,6 @@ def test_encode(encoder, codec, width, height, fps, seconds=3):
 
 
 def candidates(rec, available):
-    """Encoder/codec pairs to try, best first, starting with `rec`."""
     order = [(rec["encoder"], rec["codec"])]
     for enc in ("nvenc", "vaapi", "vulkan", "x264"):
         if enc not in available:
@@ -228,8 +212,6 @@ def candidates(rec, available):
 
 
 def find_working(rec, available, width, height, limit=4):
-    """Test candidates until one keeps up. Returns every result so the page
-    can show what was tried; failures carry an "error" instead of "fps"."""
     results = []
     for enc, codec in candidates(rec, available)[:limit]:
         try:

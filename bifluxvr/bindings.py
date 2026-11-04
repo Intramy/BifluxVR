@@ -1,13 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Button remapping for OpenVR games.
-
-Games that use SteamVR Input ship an action manifest (actions.json) with
-default binding files per controller. xrizer reads those, so swapping input
-paths in them remaps the controls without SteamVR. The original files are
-kept and every change is rebuilt from them, so turning all swaps off
-restores the game exactly. Games on the legacy OpenVR input API hard-code
-their buttons and can't be remapped this way."""
-
 import hashlib
 import json
 import os
@@ -28,7 +18,6 @@ def _both(a, b):
     return [_pair("left", a, b), _pair("right", a, b)]
 
 
-# id → (serious label, funny label, {controller type: [(path, path), ...]})
 SWAPS = {
     "ab": ("Swap A and B", "A ↔ B",
            {"oculus_touch": [_pair("right", "a", "b")], "knuckles": [_pair("right", "a", "b")]}),
@@ -43,7 +32,6 @@ SWAPS = {
 
 
 def find_manifest(root, max_depth=6):
-    """The game's SteamVR Input action manifest, or ""."""
     base = root.rstrip(os.sep).count(os.sep)
     for dirpath, dirnames, files in os.walk(root):
         if dirpath.count(os.sep) - base >= max_depth:
@@ -63,7 +51,6 @@ def find_manifest(root, max_depth=6):
 
 
 def binding_files(manifest):
-    """{controller type: binding file} for the controllers we can remap."""
     with open(manifest, encoding="utf-8-sig") as f:
         data = json.load(f)
     out = {}
@@ -108,8 +95,6 @@ def active(game):
 
 
 def apply(game, manifest, swaps):
-    """Rewrite the game's binding files with `swaps` applied. An empty list
-    restores the originals."""
     state = mods.load_state(game)
     saved = state.get("bindings", {"files": {}})
     keep_dir = os.path.join(mods.MODS_DIR, mods.game_key(game), "bindings")
@@ -119,7 +104,6 @@ def apply(game, manifest, swaps):
                               "This game didn't ship bindings for Touch or Index controllers. Nothing to swap."))
     for kind, path in files.items():
         entry = saved["files"].get(path)
-        # A game update replaces the file; take the new one as the original.
         if not entry or _digest(path) != entry.get("written"):
             os.makedirs(keep_dir, exist_ok=True)
             backup = os.path.join(keep_dir, f"{kind}.json")

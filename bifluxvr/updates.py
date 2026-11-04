@@ -1,6 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Update notices: new BifluxVR, WiVRn and xrizer releases, and Proton\nreleases whose notes name a game in your library."""
-
 import calendar
 import json
 import os
@@ -17,7 +14,7 @@ PATH = os.path.join(CACHE_DIR, "notifications.json")
 INTERVAL = 6 * 3600
 KEEP = 30
 PROTON_REPOS = (("ValveSoftware/Proton", "Proton"), ("GloriousEggroll/proton-ge-custom", "GE-Proton"))
-RECENT = 45 * 86400  # Proton releases older than this are old news
+RECENT = 45 * 86400
 _lock = threading.Lock()
 
 
@@ -73,7 +70,7 @@ def _check_app():
         return []
     return [{"id": f"app-{rel['version']}", "kind": "app", "version": rel["version"],
              "title": t(f"BifluxVR {rel['version']} is available", f"BifluxVR {rel['version']} is here"),
-             "body": t("Install it from Settings.", "Grab it in Settings & Stuff. One click, promise.")}]
+             "body": t("Install it from Settings.", "Get it in Settings & Stuff.")}]
 
 
 def _check_wivrn():
@@ -87,7 +84,7 @@ def _check_wivrn():
     return [{"id": f"wivrn-{tag}", "kind": "wivrn", "url": rel.get("html_url", ""),
              "title": t(f"WiVRn {tag.lstrip('v')} is available", f"WiVRn {tag.lstrip('v')} just dropped"),
              "body": t(f"You have {have}. Update the server and the headset app together.",
-                       f"You're on {have}. Update the server and the headset app together, they're a couple.")}]
+                       f"You're on {have}. Update the server and the headset app together, they need to match.")}]
 
 
 def _check_xrizer():
@@ -99,8 +96,8 @@ def _check_xrizer():
     if not tag or not have or _version(tag) <= _version(have):
         return []
     return [{"id": f"xrizer-{tag}", "kind": "xrizer", "url": f"https://github.com/{openvr.XRIZER_REPO}/releases",
-             "title": t(f"xrizer {tag} is available", f"Fresh xrizer: {tag}"),
-             "body": t("Download it from the Translation page.", "Grab it on the Babel Fish page.")}]
+             "title": t(f"xrizer {tag} is available", f"New xrizer: {tag}"),
+             "body": t("Download it from the Translation page.", "Get it on the Babel Fish page.")}]
 
 
 def _mentions(body, name):
@@ -136,15 +133,12 @@ def _check_proton(games):
                 line = _mentions(body, name)
                 if line:
                     out.append({"id": f"proton-{tag}-{key}", "kind": "proton", "url": rel.get("html_url", ""),
-                                "title": t(f"{release} mentions {name}", f"{release} did something for {name}"),
+                                "title": t(f"{release} mentions {name}", f"{release} has fixes for {name}"),
                                 "body": line[:200]})
     return out
 
 
 def check(games, force=False):
-    """Look for new notices at most every few hours. `games` is a list of
-    (library key, title). Returns only notices not seen before. Network
-    errors are swallowed per source so one flaky API doesn't hide the rest."""
     with _lock:
         data = _load()
     if not force and time.time() - data["checked"] < INTERVAL:

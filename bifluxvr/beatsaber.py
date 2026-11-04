@@ -1,11 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Beat Saber custom songs: BSIPA + SongCore and whatever they need, picked
-from BeatMods for the exact game version and installed as normal mods, so
-each one can still be rolled back.
-
-BSIPA's own installer (IPA.exe) only copies a few files into place; doing that
-here keeps those files tracked too."""
-
 import hashlib
 import os
 import re
@@ -21,20 +13,17 @@ API = "https://beatmods.com/api"
 CDN = "https://beatmods.com/cdn/mod"
 ROOTS = ("BSIPA", "SongCore")
 SOURCE = "beatmods:"
-# Files a manual install leaves behind that are safe to move aside.
 LOOSE = ("Plugins/", "Libs/", "IPA/", "IPA.", "winhttp.dll", "Beat Saber_Data/Managed/IPA.")
 
 _catalog = net.Cache("beatmods.json", 6 * 3600)
 
 
 def game_root(game):
-    """The Beat Saber folder, or "" if this isn't Beat Saber."""
     root = mods.game_dir(game)
     return root if os.path.isfile(os.path.join(root, "Beat Saber.exe")) else ""
 
 
 def game_version(root):
-    """"1.44.1" from the game's own data, "" if unreadable."""
     try:
         with open(os.path.join(root, "Beat Saber_Data", "globalgamemanagers"), "rb") as f:
             m = re.search(rb"(\d+\.\d+\.\d+)_\d{4,}", f.read())
@@ -53,8 +42,6 @@ def catalog(version):
 
 
 def plan(version):
-    """Mods to install for `version`, dependencies first. [] if BeatMods has
-    nothing for it yet."""
     entries = catalog(version)
     by_vid = {e["latest"]["id"]: e for e in entries}
     by_name = {e["mod"]["name"]: e for e in entries}
@@ -79,8 +66,6 @@ def plan(version):
 
 
 def _dests(rel):
-    """Where a file from a BeatMods zip ends up. BSIPA ships its loader under
-    IPA/ and copies it out on install."""
     out = [rel]
     if rel.startswith("IPA/Libs/"):
         out.append(rel[4:])
@@ -96,8 +81,6 @@ def ours(game):
 
 
 def status(game):
-    """{"version", "plan", "installed", "state"}, state one of install, update,
-    current, unsupported."""
     root = game_root(game)
     version = game_version(root)
     todo = plan(version) if version else []
@@ -140,8 +123,6 @@ def _stage(archive, into):
 
 
 def install(game):
-    """Install or update everything. Older copies, whether added here, through
-    Add Mod or by hand, go first. Returns the new records."""
     root = game_root(game)
     version = game_version(root)
     todo = plan(version) if version else []
@@ -156,8 +137,6 @@ def install(game):
         if m.get("source", "").startswith(SOURCE) or files & wanted:
             mods.rollback(game, m["id"])
 
-    # A hand install isn't tracked anywhere: park its files instead of
-    # backing them up as if they were the game's.
     aside = os.path.join(mods._dir(game), f"loose-{int(time.time())}")
     for rel in sorted(wanted):
         path = os.path.join(root, rel)

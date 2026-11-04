@@ -1,18 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Donation tiers shown on the Support page.
-
-Set DONATE_URL to your payment link to switch the buttons on. `{amount}`
-(whole euros) and `{item}` are filled in, e.g.
-    "https://paypal.me/yourname/{amount}EUR"
-    "https://ko-fi.com/yourname"
-Revolut.me takes the amount in cents, hence the 00.
-
-The goal bar is typed by hand, since Revolut has no public total. With a GitHub
-REPO set, funding.json at the top of the repo overrides these without a release:
-    {"month": "2026-11", "raised": 12, "goal": 50}
-A month that isn't the current one counts as nothing raised yet.
-"""
-
 import time
 
 from . import net, selfupdate
@@ -24,25 +9,14 @@ RAISED = 0
 RAISED_MONTH = "2026-11"
 
 TIERS = [
-    # (id, emoji, title, (serious blurb, funny blurb), min €, max €, default €)
-    ("cigarette", "🚬", "Buy me a cigarette",
-     ("A small tip for the developer.",
-      "For the 3 a.m. debugging sessions. Don't tell my mom."), 2, 5, 3),
-    ("energy", "⚡", "Buy me an energy drink",
-     ("Helps fund the next feature.",
-      "Liquid motivation. The next feature literally runs on this."), 1, 3, 2),
-    ("support", "💜", "Offer some support",
-     ("Supports ongoing development and maintenance.",
-      "Keeps BifluxVR free, alive and slightly less buggy."), 1, 10, 5),
+    ("energy", "⚡", "Energy drink", ("A can for the next late session.", "One can. The next feature runs on this."), 2),
+    ("cigarette", "🚬", "Pack of cigarettes", ("A pack for the long debugging nights.", "For the 3 a.m. bugs. Don't tell my mom."), 6),
+    ("lunch", "🍔", "Lunch", ("A proper meal, away from the desk.", "Real food. Rare around here."), 10),
 ]
 
-# The open-ended one under the tiers: any whole amount, picked by the giver.
-# (id, emoji, title, (serious blurb, funny blurb), min €, max €, default €, quick picks)
-CUSTOM = ("updates", "🚀", "Keep the updates coming",
-          ("Pick any amount you like. It goes toward keeping BifluxVR updated as Proton, WiVRn and "
-           "games change.",
-           "Name your price. It keeps the updates rolling every time Proton, WiVRn or some game "
-           "decides to break everything."), 1, 500, 10, (5, 10, 20, 50))
+CUSTOM = ("updates", "🚀", "Your own number",
+          ("Any amount. It goes toward keeping BifluxVR working as Proton, WiVRn and games change.",
+           "Whatever you like. Proton, WiVRn or some game will break something next week anyway."), 1, 100, 5, (5, 15, 25))
 
 
 def url_for(tier_id, amount):
@@ -52,7 +26,6 @@ def url_for(tier_id, amount):
 
 
 def funding():
-    """(raised, goal) in whole euros for this month. May hit the network."""
     month, raised, goal = RAISED_MONTH, RAISED, GOAL
     if selfupdate.REPO:
         try:

@@ -1,6 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""System readiness checks shown on the Overview and System pages."""
-
 import glob
 import os
 import re
@@ -22,7 +19,7 @@ class Check:
     title: str
     state: str
     detail: str
-    fix: str = ""  # label of the one-click fix, if any
+    fix: str = ""
 
 
 def gpus():
@@ -50,7 +47,6 @@ def nvidia_version():
 
 
 def server_managed(usable):
-    """The runtime a self-managing server (WiVRn) will activate, if any."""
     for rt in usable:
         s = runtimes.server_for(rt.kind)
         if s and s.installed and s.manages_runtime:
@@ -65,8 +61,8 @@ def run_all():
     icds = glob.glob("/usr/share/vulkan/icd.d/*.json") + glob.glob("/etc/vulkan/icd.d/*.json")
     if not icds:
         checks.append(Check("vulkan", t("Vulkan driver", "Graphics driver (Vulkan)"), FAIL,
-                            t("No Vulkan ICD found — DXVK, VKD3D-Proton and VR compositors need Vulkan.",
-                              "No Vulkan driver found. Without it, nothing here works. Like, nothing.")))
+                            t("No Vulkan ICD found. DXVK, VKD3D-Proton and VR compositors need Vulkan.",
+                              "No Vulkan driver found. Without it, nothing here works.")))
     else:
         names = ", ".join(sorted({v for v, _ in g})) or "GPU"
         extra = f" · driver {nvidia_version()}" if any(v == "NVIDIA" for v, _ in g) and nvidia_version() else ""
@@ -75,23 +71,23 @@ def run_all():
     if steam.installed():
         checks.append(Check("steam", "Steam", OK, t(f"{len(steam.libraries())} library folder(s)", f"{len(steam.libraries())} library folder(s) full of games")))
     else:
-        checks.append(Check("steam", "Steam", FAIL, t("Install Steam to play Steam VR titles.", "No Steam? Install it to play Steam games. Obviously.")))
+        checks.append(Check("steam", "Steam", FAIL, t("Install Steam to play Steam VR titles.", "Install Steam to play Steam games.")))
 
     protons = steam.proton_builds()
     if protons:
         checks.append(Check("proton", "Proton", OK,
-                            t(f"{protons[0][0]} — Win32 via Wine, D3D9-11 via DXVK, D3D12 via VKD3D-Proton",
+                            t(f"{protons[0][0]}: Win32 via Wine, D3D9-11 via DXVK, D3D12 via VKD3D-Proton",
                               f"{protons[0][0]}, ready to pretend to be Windows")))
     else:
         checks.append(Check("proton", "Proton", FAIL,
                             t("Install Proton Experimental from Steam (Library → Tools).",
-                              "Grab Proton Experimental in Steam (Library → Tools). It's free.")))
+                              "Get Proton Experimental in Steam (Library → Tools). It's free.")))
 
     if shutil.which("umu-run"):
         checks.append(Check("umu", "umu-launcher", OK, t("Runs non-Steam Windows games with Proton", "Handles your off-Steam games")))
     else:
         checks.append(Check("umu", "umu-launcher", INFO,
-                            t("Optional — improves non-Steam games. Proton is used directly otherwise.",
+                            t("Optional. Improves non-Steam games. Proton is used directly otherwise.",
                               "Optional. Makes off-Steam games happier. Without it we just use Proton directly.")))
 
     backend = installer.rar_backend()
@@ -113,18 +109,18 @@ def run_all():
     if rt and rt.valid:
         state = WARN if rt.kind == "steamvr" else OK
         detail = rt.name if state == OK else \
-            t(f"{rt.name} — WiVRn/Monado give lower latency without SteamVR",
+            t(f"{rt.name}. WiVRn/Monado give lower latency without SteamVR",
               f"{rt.name}. It works, but WiVRn/Monado are snappier")
         checks.append(Check("openxr", t("OpenXR runtime", "OpenXR runtime"), state, detail,
                             t(f"Use {usable[0].name}", f"Switch to {usable[0].name}") if state == WARN and usable else ""))
     elif server_managed(usable):
         checks.append(Check("openxr", t("OpenXR runtime", "OpenXR runtime"), OK,
-                            t(f"{server_managed(usable).name} — activated by its server when it starts",
+                            t(f"{server_managed(usable).name}, activated by its server when it starts",
                               f"{server_managed(usable).name}, clocks in when its server starts")))
     elif usable:
         checks.append(Check("openxr", t("OpenXR runtime", "OpenXR runtime"), FAIL,
-                            t("No runtime is active", "Nobody's in charge"),
-                            t(f"Use {usable[0].name}", f"Put {usable[0].name} in charge")))
+                            t("No runtime is active", "None active"),
+                            t(f"Use {usable[0].name}", f"Use {usable[0].name}")))
     else:
         checks.append(Check("openxr", t("OpenXR runtime", "OpenXR runtime"), FAIL,
                             t("Install WiVRn (Quest/Pico, wireless) or Monado (wired PC headsets).",
@@ -137,25 +133,25 @@ def run_all():
     if kind in ("xrizer", "opencomposite"):
         if not os.path.isfile(os.path.join(cur, "bin", "linux64", "vrclient.so")):
             checks.append(Check("openvr", t("OpenVR translation", "OpenVR translator"), FAIL,
-                                t(f"{cur} is missing vrclient.so", f"{cur} lost its vrclient.so. Rude."),
+                                t(f"{cur} is missing vrclient.so", f"{cur} is missing its vrclient.so."),
                                 t("Repair", "Fix It") if layers else ""))
         else:
             name = "xrizer" if kind == "xrizer" else "OpenComposite"
             checks.append(Check("openvr", t("OpenVR translation", "OpenVR translator"), OK,
-                                t(f"{name} — OpenVR games talk straight to OpenXR", f"{name}, translating OpenVR like a champ")))
+                                t(f"{name}: OpenVR games talk straight to OpenXR", f"{name} is translating OpenVR")))
     elif kind == "steamvr":
         checks.append(Check("openvr", t("OpenVR translation", "OpenVR translator"), WARN,
-                            t("OpenVR is routed through SteamVR", "OpenVR is taking the SteamVR scenic route"),
-                            t("Use xrizer", "Switch to xrizer") if xrizer else t("Get xrizer", "Grab xrizer")))
+                            t("OpenVR is routed through SteamVR", "OpenVR is going through SteamVR"),
+                            t("Use xrizer", "Switch to xrizer") if xrizer else t("Get xrizer", "Get xrizer")))
     else:
         checks.append(Check("openvr", t("OpenVR translation", "OpenVR translator"), FAIL,
                             t("OpenVR games have no runtime", "OpenVR games have nowhere to go"),
-                            t("Use xrizer", "Switch to xrizer") if xrizer else t("Get xrizer", "Grab xrizer")))
+                            t("Use xrizer", "Switch to xrizer") if xrizer else t("Get xrizer", "Get xrizer")))
 
     server = runtimes.preferred_server()
     if server:
         if server.running:
-            checks.append(Check("server", server.title, OK, t("Running — put on your headset", "Running. Headset on, go go go")))
+            checks.append(Check("server", server.title, OK, t("Running. Put on your headset", "Running. Put your headset on")))
         else:
             checks.append(Check("server", server.title, WARN, t("Not running", "Snoozing"), t("Start", "Wake It Up")))
         if server.kind == "wivrn":
@@ -163,7 +159,7 @@ def run_all():
                 checks.append(Check("avahi", t("Headset discovery", "Headset finder"), OK, t("Avahi is running", "Avahi is on the lookout")))
             else:
                 checks.append(Check("avahi", t("Headset discovery", "Headset finder"), INFO,
-                                    t("Avahi isn't running — connect from the headset by IP address",
+                                    t("Avahi isn't running. Connect from the headset by IP address",
                                       "Avahi's off, so connect from the headset by IP address")))
     return checks
 
@@ -174,9 +170,6 @@ def summary(checks):
     return blocking, warns
 
 
-# ------------------------------------------------------------- per game
-
-# What a Wine/Proton log says when a launch went wrong, most telling first.
 _LOG_PROBLEMS = [
     (re.compile(r"XR_ERROR_RUNTIME_(UNAVAILABLE|FAILURE)|xrCreateInstance failed"),
      lambda m: t("the game couldn't reach the OpenXR runtime", "the game couldn't find the OpenXR runtime")),
@@ -185,19 +178,17 @@ _LOG_PROBLEMS = [
     (re.compile(r"err:module:import_dll (?:Library|Loading library) (\S+)"),
      lambda m: t(f"{m.group(1)} is missing", f"it's missing {m.group(1)}")),
     (re.compile(r"Unhandled (page fault|exception)"),
-     lambda m: t("it crashed (unhandled exception)", "it crashed. Hard.")),
+     lambda m: t("it crashed (unhandled exception)", "it crashed")),
 ]
 
 
 def game_log(game):
     if game.custom:
         return os.path.join(LOG_DIR, f"{slug(game.name)}.log")
-    return os.path.join(HOME, f"steam-{game.appid}.log")  # written with PROTON_LOG=1
+    return os.path.join(HOME, f"steam-{game.appid}.log")
 
 
 def meta_check_failed(game):
-    """Did the game's last run stop at Meta's ownership check? Unity keeps its
-    own log inside the Wine prefix."""
     pfx = (game.prefix or launcher.default_prefix(game.name)) if game.custom else steam.compat_prefix(game.appid)
     if not pfx:
         return False
@@ -227,8 +218,6 @@ def log_problem(path):
 
 
 def check_game(game, cfg):
-    """Everything that decides whether this one game will start in VR.
-    Reads game files and Steam config; call from a worker thread."""
     checks = []
     vr = not game.custom or game.mode == "vr"
 
@@ -237,13 +226,13 @@ def check_game(game, cfg):
             checks.append(Check("game-files", t("Game files", "Game files"), OK, os.path.basename(game.exe)))
         else:
             checks.append(Check("game-files", t("Game files", "Game files"), FAIL,
-                                t(f"{game.exe} is missing", f"{os.path.basename(game.exe)} vanished. Spooky.")))
+                                t(f"{game.exe} is missing", f"{os.path.basename(game.exe)} is gone")))
             return checks
     elif not installer.find_executables(game.install_dir):
         checks.append(Check("game-files", t("Game files", "Game files"), FAIL,
                             t("No game executable in the install folder. The install looks incomplete.",
                               "There's no .exe in the install folder. Looks half-installed."),
-                            t("Verify in Steam", "Ask Steam to Fix It")))
+                            t("Verify in Steam", "Verify in Steam")))
         return checks
     else:
         checks.append(Check("game-files", t("Game files", "Game files"), OK,
@@ -272,7 +261,7 @@ def check_game(game, cfg):
     if state:
         ask = state == FAIL and (game.store_id or not game.custom)
         checks.append(Check("game-ac", t("Anti-cheat", "Anti-cheat"), state, detail,
-                            t("Ask the Devs", "Bug the Devs") if ask else ""))
+                            t("Ask the Devs", "Ask the Devs") if ask else ""))
 
     if game.custom:
         protons = steam.proton_builds()
@@ -292,15 +281,15 @@ def check_game(game, cfg):
                                 if proton else t("Prefix ready", "Prefix ready")))
         else:
             checks.append(Check("game-proton", "Proton", INFO,
-                                t("Not run through Proton yet", "Hasn't met Proton yet")))
+                                t("Not run through Proton yet", "Hasn't run under Proton yet")))
 
     if vr and not game.custom and game.vr_apis:
         opts = steam.get_launch_options(game.appid)
         if steam.has_env(opts, runtimes.vr_env()):
-            checks.append(Check("game-options", t("Launch options", "Magic words"), OK,
-                                t("VR variables are set", "Set. The headset will be found.")))
+            checks.append(Check("game-options", t("Launch options", "Launch options"), OK,
+                                t("VR variables are set", "Set")))
         else:
-            checks.append(Check("game-options", t("Launch options", "Magic words"), WARN,
+            checks.append(Check("game-options", t("Launch options", "Launch options"), WARN,
                                 t("VR variables missing; the game may not find the runtime",
                                   "Missing, so the game might not find your headset"),
                                 t("Apply", "Do It")))
@@ -312,7 +301,7 @@ def check_game(game, cfg):
                                 t(f"Through {kind}", f"Goes through {kind}")))
         else:
             checks.append(Check("openvr", t("OpenVR route", "OpenVR route"), WARN,
-                                t("No OpenVR translation layer is active", "Nobody's translating OpenVR"),
+                                t("No OpenVR translation layer is active", "Nothing is translating OpenVR"),
                                 t("Use xrizer", "Switch to xrizer")))
 
     dll = mods.dll_overrides(game)

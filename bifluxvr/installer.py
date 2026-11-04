@@ -1,7 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Drop Folder: unpack a game's .zip or .rar into a chosen folder and find
-the executable that actually starts the game."""
-
 import functools
 import math
 import os
@@ -16,15 +12,22 @@ from dataclasses import dataclass, field
 from . import steam
 from .voice import t
 
-ARCHIVE_EXTS = (".zip", ".rar")
-# Multi-part RARs: game.part1.rar, game.part02.rar, …
+ARCHIVE_EXTS = (".zip", ".rar", ".7z")
+SETUP_EXTS = (".exe", ".msi")
 _VOLUME = re.compile(r"\.part0*(\d+)\.rar$", re.I)
 
-# Executables that ship alongside games but never start them.
 _NOT_GAME = re.compile(
     r"(unins|setup|install|redist|vc_?redist|dxsetup|directx|dotnet|prereq|crash|report|"
     r"helper|updater|update|uninstall|easyanticheat|eac_|battleye|cleanup|benchmark|"
     r"config|settings|launcherpatcher|cefprocess|webhelper|7z|unitycrashhandler|ue4prereq)",
+    re.I,
+)
+
+
+_SETUP = re.compile(r"setup|install", re.I)
+_NOT_SETUP = re.compile(
+    r"(unins|redist|dxsetup|dxwebsetup|directx|dotnet|ndp\d|prereq|physx|oalinst|xnafx|easyanticheat|battleye|"
+    r"vc_?runtime|msvc|nvidia|openal)",
     re.I,
 )
 
@@ -36,24 +39,40 @@ class InstallError(RuntimeError):
 @dataclass
 class ArchiveInfo:
     path: str
-    name: str  # suggested game name
-    size: int  # uncompressed bytes; 0 when the backend can't tell
+    name: str
+    size: int
     files: int
-    exes: list = field(default_factory=list)  # archive paths of .exe files
+    exes: list = field(default_factory=list)
+    setup: str = ""
 
 
 def supported(path):
     return path.lower().endswith(ARCHIVE_EXTS)
 
 
+def runnable(path):
+    return path.lower().endswith(SETUP_EXTS)
+
+
+def is_setup(path):
+    path = path.replace("\\", "/")
+    return (runnable(path) and bool(_SETUP.search(os.path.basename(path)))
+            and not _NOT_SETUP.search(path))
+
+
+def pick_setup(paths):
+    found = [p for p in paths if is_setup(p)]
+    if not found:
+        return ""
+    return min(found, key=lambda p: (p.replace("\\", "/").count("/"), len(os.path.basename(p))))
+
+
 def volume_number(path):
-    """The part number of a multi-part RAR, or None for a single archive."""
     m = _VOLUME.search(path)
     return int(m.group(1)) if m else None
 
 
 def first_volume(path):
-    """For game.part3.rar, the path of the part that opens the set, or None."""
     d, base = os.path.split(path)
     stem = _VOLUME.sub("", base)
     for cand in sorted(os.listdir(d or ".")):
@@ -64,7 +83,6 @@ def first_volume(path):
 
 @functools.lru_cache(maxsize=1)
 def rar_backend():
-    """'unrar' (RARLAB's, not unrar-free) if present, else 'bsdtar', else None."""
     if shutil.which("unrar"):
         try:
             banner = subprocess.run(["unrar"], capture_output=True, text=True, timeout=10).stdout
@@ -77,12 +95,19 @@ def rar_backend():
     return None
 
 
+def _backend(path):
+    if path.lower().endswith(".7z"):
+        return "bsdtar" if shutil.which("bsdtar") else None
+    return rar_backend()
+
+
 def suggest_name(path):
     stem = os.path.basename(path)
     stem = _VOLUME.sub("", stem)
-    stem = re.sub(r"\.(zip|rar)$", "", stem, flags=re.I)
-    stem = re.sub(r"\s*[\[(].*?[\])]\s*", " ", stem)  # drop [tags] and (versions)
-    stem = re.sub(r"[\s._-]+v?\d+([._]\d+)+.*$", "", stem, flags=re.I)  # trailing version
+    stem = re.sub(r"\.(zip|rar|7z|exe|msi)$", "", stem, flags=re.I)
+    stem = re.sub(r"[\s._-]*(setup|installer|install)\b.*$", "", stem, flags=re.I)
+    stem = re.sub(r"\s*[\[(].*?[\])]\s*", " ", stem)
+    stem = re.sub(r"[\s._-]+v?\d+([._]\d+)+.*$", "", stem, flags=re.I)
     stem = re.sub(r"[._]+", " ", stem)
     return " ".join(stem.split()) or "Game"
 
@@ -94,7 +119,7 @@ def _unsafe(name):
 
 def _unsafe_error(member):
     return InstallError(t(f"Unsafe path in archive: {member}",
-                          f"This archive tried to sneak a file outside its folder ({member}). Blocked."))
+                          f"This archive tried to write outside its folder ({member}). Blocked."))
 
 
 def _password_error(path):
@@ -105,17 +130,15 @@ def _password_error(path):
 
 
 def _list_rar(path):
-    """[(name, size, is_dir)] for a RAR archive."""
-    backend = rar_backend()
+    backend = _backend(path)
     if backend is None:
         raise InstallError(t("Install unrar (or bsdtar) to open .rar files",
-                             "I need unrar (or bsdtar) installed to crack open .rar files"))
+                             "Install unrar or bsdtar to open this archive"))
     if backend == "bsdtar":
         r = subprocess.run(["bsdtar", "-tf", path], capture_output=True, text=True)
         if r.returncode:
             raise _bsdtar_error(path, r.stderr)
         return [(n, 0, False) for n in r.stdout.splitlines() if n]
-    # -p-: never prompt for a password
     r = subprocess.run(["unrar", "lt", "-p-", path], capture_output=True, text=True)
     out = r.stdout + r.stderr
     if r.returncode == 11 or "encrypted headers" in out:
@@ -143,7 +166,6 @@ def _list_rar(path):
 
 
 def _reason(output):
-    """The most telling line of a tool's error output."""
     lines = [l.strip() for l in output.strip().splitlines()
              if l.strip() and "Error exit delayed" not in l]
     return lines[0] if lines else "unknown error"
@@ -156,32 +178,43 @@ def _read_error(path, output):
 
 
 def _bsdtar_error(path, output):
-    """bsdtar only handles some RARs; point at unrar, which handles them all."""
     if re.search(r"encrypt|passphrase|password", output, re.I):
         return _password_error(path)
     name = os.path.basename(path)
     reason = _reason(output)
     return InstallError(t(f"Couldn't read {name} ({reason}). Install unrar for full .rar support",
-                          f"{name} is too fancy for bsdtar ({reason}). Install unrar and try again"))
+                          f"{name} is too much for bsdtar ({reason}). Install unrar and try again"))
 
 
 def inspect(path):
-    """Read the archive's directory (fast — no decompression)."""
     name = os.path.basename(path)
-    if path.lower().endswith(".rar"):
+    if not path.lower().endswith(".zip"):
         entries = _list_rar(path)
     else:
         try:
             with zipfile.ZipFile(path) as z:
                 entries = [(i.filename, i.file_size, i.is_dir()) for i in z.infolist()]
         except (zipfile.BadZipFile, OSError) as e:
-            raise InstallError(t(f"{name} isn't a valid .zip: {e}", f"{name} isn't a real .zip. Nice try: {e}")) from e
+            raise InstallError(t(f"{name} isn't a valid .zip: {e}", f"{name} isn't a valid .zip: {e}")) from e
     for member, _, _ in entries:
         if _unsafe(member):
             raise _unsafe_error(member)
     files = [(n, s) for n, s, is_dir in entries if not is_dir]
     exes = [n for n, _ in files if n.lower().endswith(".exe")]
-    return ArchiveInfo(path, suggest_name(path), sum(s for _, s in files), len(files), exes)
+    setups = exes + [n for n, _ in files if n.lower().endswith(".msi")]
+    return ArchiveInfo(path, suggest_name(path), sum(s for _, s in files), len(files), exes, pick_setup(setups))
+
+
+def inspect_setup(path):
+    name = suggest_name(path)
+    if name == "Game":
+        name = os.path.basename(os.path.dirname(path)) or name
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        size = 0
+    base = os.path.basename(path)
+    return ArchiveInfo(path, name, size, 1, [base], base)
 
 
 def _score(path, root, hint, size):
@@ -194,12 +227,11 @@ def _score(path, root, hint, size):
     compact = re.sub(r"[^a-z0-9]", "", base)
     score += 25 * sum(1 for w in words if w in compact)
     if base.endswith("-win64-shipping"):
-        score += 5  # Unreal's real binary; the root stub is fine too
+        score += 5
     return score + math.log2(max(size, 1)) / 2
 
 
 def find_executables(root, hint=""):
-    """All .exe files under `root`, most likely game binary first."""
     found = []
     for dirpath, _, files in os.walk(root):
         for f in files:
@@ -254,34 +286,31 @@ def _dir_size(path):
 
 
 def _extract_rar(path, staging, total, progress):
-    backend = rar_backend()
+    backend = _backend(path)
     if backend == "unrar":
-        # x: keep paths · -p-: never prompt · -o+: overwrite · -ol-: skip symlinks
         argv = ["unrar", "x", "-p-", "-o+", "-y", "-ol-", "-idq", path, staging + os.sep]
     else:
         argv = ["bsdtar", "-xf", path, "-C", staging]
     with tempfile.TemporaryFile() as err:
         proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=err)
-        while proc.poll() is None:  # the tools report no usable progress; watch the disk
+        while proc.poll() is None:
             time.sleep(0.4)
             if progress and total:
                 progress(min(_dir_size(staging) / total, 0.99))
         err.seek(0)
         output = err.read().decode(errors="replace")
     if backend == "unrar":
-        if proc.returncode not in (0, 1):  # unrar: 1 = non-fatal warning
+        if proc.returncode not in (0, 1):
             if proc.returncode == 11 or re.search(r"password|encrypt", output, re.I):
                 raise _password_error(path)
             raise _read_error(path, output)
-    elif proc.returncode:  # bsdtar: any non-zero exit is a failure
+    elif proc.returncode:
         raise _bsdtar_error(path, output)
     if progress:
         progress(1.0)
 
 
 def _drop_escaping_links(root):
-    """Delete symlinks that point outside `root` — a game never needs them,
-    and they'd let later writes land anywhere on disk."""
     root_real = os.path.realpath(root)
     for dirpath, dirnames, files in os.walk(root):
         for f in files + dirnames:
@@ -293,10 +322,8 @@ def _drop_escaping_links(root):
 
 
 def extract(path, dest, progress=None):
-    """Unpack a .zip or .rar into the existing folder `dest`, with the same
-    safety checks as install()."""
     info = inspect(path)
-    if path.lower().endswith(".rar"):
+    if not path.lower().endswith(".zip"):
         _extract_rar(path, dest, info.size, progress)
     else:
         _extract_zip(path, dest, info.size, progress)
@@ -305,26 +332,22 @@ def extract(path, dest, progress=None):
 
 
 def install(path, dest_parent, name, progress=None):
-    """Extract the archive at `path` into a new folder under `dest_parent`.
-    Returns (game_dir, exe, vr_apis). Runs on a worker thread;
-    `progress(fraction)` is called as files are written."""
     info = inspect(path)
     os.makedirs(dest_parent, exist_ok=True)
     free = shutil.disk_usage(dest_parent).free
     if info.size > free:
         raise InstallError(t(f"Not enough space: needs {human(info.size)}, {human(free)} free",
-                             f"Your disk is full-ish: needs {human(info.size)}, only {human(free)} free"))
+                             f"Not enough space: needs {human(info.size)}, only {human(free)} free"))
     target = _unique_dir(dest_parent, name)
     staging = target + ".partial"
     shutil.rmtree(staging, ignore_errors=True)
     os.makedirs(staging)
     try:
-        if path.lower().endswith(".rar"):
+        if not path.lower().endswith(".zip"):
             _extract_rar(path, staging, info.size, progress)
         else:
             _extract_zip(path, staging, info.size, progress)
         _drop_escaping_links(staging)
-        # Most game archives wrap everything in one top-level folder; unwrap it.
         entries = os.listdir(staging)
         inner = os.path.join(staging, entries[0]) if len(entries) == 1 else None
         if inner and os.path.isdir(inner) and not os.path.islink(inner):
@@ -340,7 +363,7 @@ def install(path, dest_parent, name, progress=None):
         shutil.rmtree(target, ignore_errors=True)
         archive = os.path.basename(path)
         raise InstallError(t(f"{archive} contains no Windows .exe",
-                             f"{archive} has no Windows .exe inside. What is this?"))
+                             f"{archive} has no Windows .exe inside"))
     apis, _ = steam.detect_vr(target)
     return target, exes[0], apis
 

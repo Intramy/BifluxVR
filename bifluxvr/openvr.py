@@ -1,11 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""OpenVR → OpenXR translation: manages ~/.config/openvr/openvrpaths.vrpath
-and the xrizer / OpenComposite installations it points at.
-
-Proton's vrclient bridge loads whatever Linux OpenVR runtime this file
-names, so pointing it at xrizer gives Windows OpenVR games a direct path to
-the OpenXR runtime with no SteamVR in between."""
-
 import glob
 import json
 import os
@@ -28,7 +20,7 @@ LOCAL_XRIZER = os.path.join(DATA_HOME, "bifluxvr", "xrizer")
 
 @dataclass
 class Layer:
-    kind: str  # xrizer | opencomposite | steamvr
+    kind: str
     title: str
     path: str
     version: str = ""
@@ -114,7 +106,6 @@ def is_locked():
 
 
 def set_runtime(path, lock=None):
-    """Point OpenVR at `path`, preserving the rest of the vrpath file."""
     was_locked = is_locked()
     data = read_vrpath()
     data.setdefault("config", [os.path.join(steam.roots()[0], "config")] if steam.roots() else [])
@@ -132,15 +123,13 @@ WIVRN_CONFIG = os.path.join(CONFIG_HOME, "wivrn", "config.json")
 
 
 def _sync_wivrn(path):
-    """WiVRn rewrites the vrpath file with its own `openvr-compat-path` each
-    time it starts; keep that setting in step with the user's choice."""
     if not shutil.which("wivrn-server") or classify(path) == "steamvr":
         return
     try:
         with open(WIVRN_CONFIG) as f:
             cfg = json.load(f)
         if not isinstance(cfg, dict):
-            return  # don't clobber a config we don't understand
+            return
     except FileNotFoundError:
         cfg = {}
     except (OSError, ValueError):
@@ -162,14 +151,12 @@ def latest_xrizer_version():
 
 
 def install_latest_xrizer(progress=None):
-    """Download the latest xrizer release into ~/.local/share/bifluxvr/xrizer
-    and return the runtime directory. Runs on a worker thread."""
     rel = net.github_latest(XRIZER_REPO)
     tag = rel.get("tag_name", "latest")
     assets = [a for a in rel.get("assets", [])
               if a["name"].lower().startswith("xrizer") and a["name"].endswith((".zip", ".tar.xz", ".tar.gz"))]
     if not assets:
-        raise RuntimeError(t(f"xrizer {tag} has no downloadable build", f"xrizer {tag} forgot to upload a build. Try later?"))
+        raise RuntimeError(t(f"xrizer {tag} has no downloadable build", f"xrizer {tag} has no build yet. Try later."))
     asset = assets[0]
     dest = os.path.join(LOCAL_XRIZER, tag)
     if _valid(dest):
@@ -194,7 +181,7 @@ def install_latest_xrizer(progress=None):
                 for member in z.namelist():
                     target = os.path.realpath(os.path.join(out, member))
                     if not target.startswith(os.path.realpath(out) + os.sep):
-                        raise RuntimeError(t("archive contains unsafe paths", "that download tried to put files where it shouldn't. Blocked."))
+                        raise RuntimeError(t("archive contains unsafe paths", "that download tried to write outside its folder. Blocked."))
                 z.extractall(out)
         else:
             with tarfile.open(archive) as tar:
@@ -206,7 +193,7 @@ def install_latest_xrizer(progress=None):
                 break
         if not found:
             raise RuntimeError(t("downloaded archive does not contain bin/linux64/vrclient.so",
-                               "the download is missing its vrclient.so. That's the whole point of it."))
+                               "the download is missing its vrclient.so. "))
         so = os.path.join(found, "bin", "linux64", "vrclient.so")
         os.chmod(so, os.stat(so).st_mode | 0o755)
         if not os.path.exists(os.path.join(found, "version.txt")):

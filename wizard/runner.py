@@ -1,8 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Carries out a plan from packages.plan(). System packages first, in one
-pkexec (or sudo) batch; then the per-user steps. Progress goes to `emit` as
-(event, key, payload) from a worker thread."""
-
 import json
 import os
 import select
@@ -45,10 +40,6 @@ def _root_steps(items, manager):
 
 
 def _helper(argv, steps, emit, prefix=""):
-    """Feed `steps` to the root helper started by `argv` and relay its
-    progress. Returns (failed, started keys, stderr, exit code)."""
-    # A session of its own: with no terminal, pkexec can't fall back to
-    # asking for the password on whatever terminal started the installer.
     proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             text=True, errors="replace", start_new_session=True)
     proc.stdin.write(prefix + json.dumps({"steps": steps}) + "\n")
@@ -74,10 +65,6 @@ def _helper(argv, steps, emit, prefix=""):
 
 
 def _sudo_ok(password):
-    """One password attempt, counted once. sudo retries on its own, and a
-    closed stdin makes every retry another failure, which pam_faillock
-    turns into a lockout after a single typo. So stdin stays open and sudo
-    is stopped as soon as it asks again."""
     try:
         proc = subprocess.Popen(["sudo", "-S", "-k", "-p", "", "-v"], stdin=subprocess.PIPE,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, start_new_session=True)
@@ -88,8 +75,6 @@ def _sudo_ok(password):
         proc.stdin.flush()
         deadline = time.monotonic() + 30
         while proc.poll() is None and time.monotonic() < deadline:
-            # Output means a lecture (before the check) or a complaint
-            # (after a failure); only a failure leaves sudo waiting for more.
             if select.select([proc.stderr], [], [], 0.2)[0] and proc.stderr.read1(4096):
                 try:
                     return proc.wait(timeout=3) == 0
@@ -103,11 +88,8 @@ def _sudo_ok(password):
 
 
 def _sudo(steps, emit, ask_password):
-    """No polkit agent to ask for the password (common on Hyprland, Sway, i3):
-    ask in the installer's own window and hand it to sudo. Never stored."""
     if not shutil.which("sudo"):
         return "couldn't get administrator rights (no polkit agent and no sudo)"
-    # Two tries: pam_faillock locks sudo after three failures by default.
     for attempt in range(2):
         password = ask_password(attempt > 0)
         if password is None:
@@ -119,7 +101,6 @@ def _sudo(steps, emit, ask_password):
 
 
 def _as_root(steps, emit, ask_password):
-    """Run `steps` as root. Returns {key: failure reason} for the ones that failed."""
     keys = [s["id"] for s in steps]
     for k in keys:
         emit("log", k, "Asking for your password to install system packages…")
@@ -214,7 +195,6 @@ USER_STEPS = {"flatpak": _flatpak, "zipapp": _umu, "xrizer": _xrizer, "bifluxvr"
 
 
 def run(items, manager, emit, ask_password=None):
-    """Returns {key: failure reason}; empty when everything worked."""
     os.makedirs(LOG_DIR, exist_ok=True)
     log = open(LOG, "w")
 

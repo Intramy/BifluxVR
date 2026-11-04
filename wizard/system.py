@@ -1,15 +1,10 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""What the installer learns about this computer. Everything here is shown
-to the user on the "Your system" page; only os, distro and kernel can leave
-the machine, and only in the install report."""
-
 import os
 import platform
 import shutil
 
 from bifluxvr import health
 
-FAMILIES = {  # os-release ID / ID_LIKE → package manager
+FAMILIES = {
     "arch": "pacman", "fedora": "dnf", "rhel": "dnf", "centos": "dnf",
     "debian": "apt", "ubuntu": "apt", "opensuse": "zypper", "suse": "zypper", "gentoo": "emerge",
 }
@@ -48,7 +43,6 @@ def os_name():
 
 
 def supported():
-    """None when this is a Linux BifluxVR can run on, else the reason."""
     name = os_name()
     if name == "Windows":
         return "Windows"

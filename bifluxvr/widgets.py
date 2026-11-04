@@ -1,6 +1,3 @@
-# Copyright (C) 2026 intramy. GPL-3.0-only with additional terms: see LICENSE and NOTICE.
-"""Small widget helpers shared by every page."""
-
 import concurrent.futures
 import threading
 import time
@@ -10,15 +7,14 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gdk, GLib, Gtk, Pango  # noqa: E402
+from gi.repository import Adw, Gdk, GLib, Gtk, Pango
 
-from . import health  # noqa: E402
-from .voice import t  # noqa: E402
+from . import health
+from .voice import t
 
 _images = concurrent.futures.ThreadPoolExecutor(max_workers=3)
 
 def run_async(fn, done=None, error=None):
-    """Run `fn` on a worker thread and deliver the result on the main loop."""
     def deliver(cb, value):
         cb(value)
         return False
@@ -26,7 +22,7 @@ def run_async(fn, done=None, error=None):
     def work():
         try:
             result = fn()
-        except Exception as e:  # noqa: BLE001 — surfaced to the user
+        except Exception as e:
             traceback.print_exc()
             if error:
                 GLib.idle_add(deliver, error, e)
@@ -81,7 +77,6 @@ def clear(box):
 
 
 def load_texture(path, widget):
-    """Decode an image off the main thread, then show it in a Gtk.Picture."""
     def work():
         try:
             tex = Gdk.Texture.new_from_filename(path)
@@ -106,9 +101,7 @@ STATE_ICONS = {
 
 
 class DynamicPrefs(Adw.PreferencesPage):
-    """A PreferencesPage whose groups are rebuilt from a State snapshot."""
-
-    TITLE = ("", "")  # (serious, funny)
+    TITLE = ("", "")
     SUBTITLE = ("", "")
 
     def __init__(self, win, **kw):
