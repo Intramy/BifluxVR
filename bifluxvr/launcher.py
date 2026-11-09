@@ -3,7 +3,7 @@ import shutil
 import signal
 import time
 
-from . import openvr, runtimes, sessions, steam
+from . import openvr, riftlift, runtimes, sessions, steam, tripwire
 from .voice import t
 from .util import APP_DATA_DIR, LOG_DIR, RUNTIME_DIR, slug, spawn_detached, terminate
 
@@ -42,6 +42,8 @@ def prepare(cfg):
 
 
 def _spawn(argv, env, log_name, cwd=None):
+    if not tripwire.check():
+        raise LaunchError("Nice try!")
     try:
         return spawn_detached(argv, os.path.join(LOG_DIR, f"{log_name}.log"), env=env, cwd=cwd)
     except OSError as e:
@@ -67,6 +69,11 @@ def default_prefix(name):
 
 
 def launch_custom(game, proton_dir, dll_overrides=""):
+    if game.get("engine") == "riftlift":
+        if not riftlift.installed():
+            raise LaunchError(t("This game runs through RiftLift. Install it again from Meta Stash",
+                                "This one needs RiftLift. Grab it again in Meta Stash"))
+        return _spawn(riftlift.play_argv(game["riftlift"]), os.environ.copy(), slug(game["name"]))
     exe = game["exe"]
     if not os.path.isfile(exe):
         raise LaunchError(t(f"{exe} no longer exists", f"{exe} is gone"))

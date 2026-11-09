@@ -10,7 +10,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, GLib, Gtk, Pango
 
-from bifluxvr import config
+from bifluxvr import config, tripwire
 from bifluxvr.widgets import run_async
 
 from . import packages, report, runner, system
@@ -525,6 +525,13 @@ class SetupApp(Adw.Application):
 
     def do_activate(self):
         win = self.props.active_window
+        if not win and tripwire.locked():
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, vexpand=True)
+            box.add_css_class("nice-try")
+            box.append(Gtk.Label(label="Nice try!", css_classes=["nice-try-text"], valign=Gtk.Align.CENTER,
+                                 vexpand=True))
+            win = Adw.ApplicationWindow(application=self, title="BifluxVR Setup", default_width=900,
+                                        default_height=620, content=box)
         if not win:
             bad = system.supported()
             win = Unsupported(self, bad) if bad else Installer(self)

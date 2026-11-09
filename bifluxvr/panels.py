@@ -576,6 +576,8 @@ class UpdateGroup(Adw.PreferencesGroup):
                                   else t("Not checked yet", "Not checked yet"))
             self.btn = suffix_button(t("Check for Updates", "Check Now"), cb=self.check)
         self.row.add_suffix(self.btn)
+        if hasattr(self.win, "overview"):
+            self.win.overview.show_update()
 
     def _open_notes(self, *_):
         self.win.open_uri(selfupdate.found["url"])

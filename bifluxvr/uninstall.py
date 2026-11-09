@@ -3,7 +3,7 @@ import shutil
 import time
 from dataclasses import dataclass, field
 
-from . import launcher, mods, steam
+from . import launcher, mods, riftlift, steam
 from .util import APP_DATA_DIR, HOME
 
 _USER_DIRS = ("Desktop", "Documents", "Downloads", "Games", "Music", "Pictures", "Public", "Templates", "Videos",
@@ -15,6 +15,7 @@ class Plan:
     steam: bool = False
     paths: list = field(default_factory=list)
     shared: str = ""
+    riftlift: str = ""
 
 
 def _entry(game, cfg):
@@ -32,6 +33,9 @@ def _protected(cfg):
     out.update(_install_dirs(cfg))
     out.update(steam.roots())
     out.update(steam.libraries())
+    from . import storage
+    for d in storage.drives():
+        out.update((d.mount, d.base, os.path.dirname(d.base)))
     return {os.path.realpath(p) for p in out}
 
 
@@ -50,7 +54,7 @@ def removable(path, cfg, game=None):
     return True
 
 
-def _root(game, entry, cfg):
+def game_root(entry, cfg):
     if entry.get("root"):
         return entry["root"]
     for rec in cfg.get("meta_games", {}).values():
@@ -70,8 +74,10 @@ def plan(game, cfg):
     entry = _entry(game, cfg)
     if not entry:
         return Plan()
+    if entry.get("engine") == "riftlift":
+        return Plan(riftlift=entry["riftlift"])
     out = Plan()
-    root = _root(game, entry, cfg)
+    root = game_root(entry, cfg)
     if removable(root, cfg, game):
         out.paths.append(root)
     else:
@@ -96,7 +102,7 @@ def _unlock(path):
                     pass
 
 
-def _wipe(path):
+def wipe(path):
     if os.path.isdir(path) and not os.path.islink(path):
         _unlock(path)
         shutil.rmtree(path)
@@ -115,9 +121,11 @@ def _forget(game, cfg):
 
 
 def run(game, cfg, chosen):
+    if chosen.riftlift:
+        riftlift.uninstall(chosen.riftlift)
     for path in chosen.paths:
-        _wipe(path)
-    _wipe(os.path.join(mods.MODS_DIR, mods.game_key(game)))
+        wipe(path)
+    wipe(os.path.join(mods.MODS_DIR, mods.game_key(game)))
     _forget(game, cfg)
 
 
@@ -130,7 +138,7 @@ def wait_for_steam(game, cfg, patience=600):
         time.sleep(2)
     pfx = steam.compat_prefix(game.appid)
     if pfx and game.appid.isdigit():
-        _wipe(os.path.dirname(pfx))
-    _wipe(os.path.join(mods.MODS_DIR, mods.game_key(game)))
+        wipe(os.path.dirname(pfx))
+    wipe(os.path.join(mods.MODS_DIR, mods.game_key(game)))
     _forget(game, cfg)
     return True

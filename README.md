@@ -152,9 +152,21 @@ Questions, bugs or a game that just started working?
   ownership through the Meta app) or Oculus SDK only. Downloads come straight
   from Meta, are checked file by file, resume after a stop, and land in the
   library. Quest-only games aren't listed; they run on the headset.
-- **Donate**: three tiers with an amount slider, plus any amount you like, and
-  a bar showing this month's development expenses. Payments happen on Revolut
-  in your browser.
+  **RiftLift** (by Villagers654) can be installed from the same page: it runs
+  Oculus SDK and Meta-platform games on your OpenXR runtime, with up to four
+  Meta accounts, side-by-side versions and betas, local Rift `.exe` files,
+  Steam games with an Oculus mode and cross-buy games by store link. Meta still
+  checks ownership live for the signed-in account; it's not a DRM bypass.
+  Installed games show up in the library like any other.
+- **Storage**: with more than one drive, a game's page can move it between
+  them (SSD1, HDD1 and so on), and the Drop Folder picks the drive new games go to.
+- **Donate**: four tiers plus any amount you like, a bar showing this month's
+  development expenses, and the Hall of Legends: donators sorted by their total,
+  with the name and picture they chose through the Discord bot. Donators get a
+  code that unlocks the Gold style and a sidebar badge. Payments happen on
+  Revolut in your browser.
+- **Looks**: Auto / Day / Night, plus a Classic or Winter style (icy colors and
+  snow on the buttons, with snowfall that pauses when the window isn't focused).
 
 ## Made with AI help
 

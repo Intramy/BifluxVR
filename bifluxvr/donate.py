@@ -10,8 +10,9 @@ RAISED_MONTH = "2026-11"
 
 TIERS = [
     ("energy", "⚡", "Energy drink", ("A can for the next late session.", "One can. The next feature runs on this."), 2),
+    ("snus", "🧊", "Can of snus", ("A can of snus for the long sessions.", "Ice cool mint. Keeps the bug hunt going."), 5),
     ("cigarette", "🚬", "Pack of cigarettes", ("A pack for the long debugging nights.", "For the 3 a.m. bugs. Don't tell my mom."), 6),
-    ("lunch", "🍔", "Lunch", ("A proper meal, away from the desk.", "Real food. Rare around here."), 10),
+    ("lunch", "🍔", "Lunch", ("A proper meal, away from the desk.", "Real food. Rare around here."), 6),
 ]
 
 CUSTOM = ("updates", "🚀", "Your own number",

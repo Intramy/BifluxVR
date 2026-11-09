@@ -3,6 +3,7 @@ import json
 import os
 import threading
 
+from . import perks, tripwire
 from .util import APP_CONFIG_DIR, CONFIG_HOME, HOME, atomic_write
 
 PATH = os.path.join(APP_CONFIG_DIR, "config.json")
@@ -42,9 +43,11 @@ def load():
             break
         except (OSError, ValueError):
             continue
-    return {**copy.deepcopy(DEFAULTS), **(data if isinstance(data, dict) else {})}
+    return perks.migrate({**copy.deepcopy(DEFAULTS), **(data if isinstance(data, dict) else {})})
 
 
 def save(data):
+    if tripwire.locked():
+        return
     with _lock:
         atomic_write(PATH, json.dumps(data, indent=2))

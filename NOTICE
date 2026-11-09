@@ -32,6 +32,13 @@ Third-party material
 The BifluxVR icon is based on Tux by Larry Ewing (lewing@isc.tamu.edu), created
 with The GIMP.
 
+The Outfit font in bifluxvr/fonts is by The Outfit Project Authors and is
+licensed under the SIL Open Font License 1.1 (bifluxvr/fonts/OFL.txt).
+
+RiftLift (https://github.com/Villagers654/RiftLift, GPL-3.0) is not bundled. On
+request, BifluxVR downloads its official release, checks it against a pinned
+checksum and runs its command-line tool.
+
 The Discord logo in bifluxvr/discord.svg is a trademark of Discord Inc. and is
 used only to link to the BifluxVR Discord server. It is not covered by the
 license above.

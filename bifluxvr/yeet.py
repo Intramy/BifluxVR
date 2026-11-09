@@ -5,7 +5,7 @@ from html import escape
 
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk
 
-from . import config, installer, setups, steam
+from . import config, installer, setups, steam, storage
 from .voice import t
 from .widgets import button, clear, label, run_async, scrolled
 
@@ -101,6 +101,15 @@ class YeetPage(Gtk.Box):
         self.mode.connect("notify::active-name", lambda *_: self._mode_changed())
         type_row.add_suffix(self.mode)
         setup.add(type_row)
+        self.drives = storage.drives()
+        if len(self.drives) > 1:
+            self.drive_row = Adw.ActionRow(title=t("Install to", "Put it on"))
+            self.drive = Adw.ToggleGroup(valign=Gtk.Align.CENTER)
+            for i, d in enumerate(self.drives):
+                self.drive.add(Adw.Toggle(name=str(i), label=d.label, tooltip=f"{d.mount} · {d.model}".rstrip(" ·")))
+            self.drive.connect("notify::active-name", lambda *_: self._drive_changed())
+            self.drive_row.add_suffix(self.drive)
+            setup.add(self.drive_row)
         self.loc_row = self._folder_row(setup, t("Unpacked games", "Unpacked games"), self._mode_key)
         self.setup_row = self._folder_row(setup, t("Installed by an installer", "Installed by an installer"),
                                           lambda: "install_dir_setup")
@@ -110,6 +119,7 @@ class YeetPage(Gtk.Box):
                             "Each installer gets its own Wine prefix inside that folder, so uninstalling leaves "
                             "nothing behind. They still run as you, so only run ones you trust."), "caption-text", wrap=True))
         self.append(scrolled(body))
+        self._sync_drive()
         self._mode_changed(save=False)
         self._scan_label()
         self._sync()
@@ -124,6 +134,33 @@ class YeetPage(Gtk.Box):
         group.add(row)
         return row
 
+    def _sync_drive(self):
+        if len(self.drives) < 2:
+            return
+        here = storage.drive_of(self.win.cfg[self._mode_key()], self.drives)
+        self.syncing = True
+        self.drive.set_active_name(str(self.drives.index(here)) if here else None)
+        self.syncing = False
+        self._drive_note(here)
+
+    def _drive_note(self, here):
+        if here:
+            self.drive_row.set_subtitle(t(f"{storage.human(here.free)} free on the {here.label}",
+                                          f"{storage.human(here.free)} of room left on the {here.label}"))
+        else:
+            self.drive_row.set_subtitle(t("Your folders are on another drive", "Your folders live somewhere else"))
+
+    def _drive_changed(self):
+        name = self.drive.get_active_name()
+        if getattr(self, "syncing", False) or name is None:
+            return
+        d = self.drives[int(name)]
+        for key in ("install_dir_vr", "install_dir_simple", "install_dir_setup"):
+            self.win.set_cfg(key, storage.target_dir(d, key, self.win.cfg, self.drives))
+        self.loc_row.set_subtitle(escape(self.win.cfg[self._mode_key()]))
+        self.setup_row.set_subtitle(escape(self.win.cfg["install_dir_setup"]))
+        self._drive_note(d)
+
     def _mode_key(self):
         return f"install_dir_{self.mode.get_active_name()}"
 
@@ -135,6 +172,8 @@ class YeetPage(Gtk.Box):
             t("Starts your headset stack and routes the game to VR", "Starts the headset stack and sends the game to VR")
             if mode == "vr" else t("Launches on your desktop, no VR setup", "Runs on your monitor, no headset"))
         self.loc_row.set_subtitle(escape(self.win.cfg[self._mode_key()]))
+        if save:
+            self._sync_drive()
 
     def choose_folder(self, key, row):
         dialog = Gtk.FileDialog(title=t("Choose Folder", "Choose Folder"))
@@ -150,6 +189,7 @@ class YeetPage(Gtk.Box):
             if folder and folder.get_path():
                 self.win.set_cfg(key(), folder.get_path())
                 row.set_subtitle(escape(folder.get_path()))
+                self._sync_drive()
         dialog.select_folder(self.win, None, picked)
 
     def _scan_label(self):

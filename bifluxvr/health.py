@@ -170,9 +170,33 @@ def summary(checks):
     return blocking, warns
 
 
+def _tail(path, size=1 << 20):
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            f.seek(max(0, f.tell() - size))
+            return f.read().decode("utf-8", "replace")
+    except OSError:
+        return None
+
+
+def _swapchain_problem(m):
+    server = _tail(os.path.join(LOG_DIR, "wivrn-server.log")) or ""
+    if "OUT_OF_DEVICE_MEMORY" in server:
+        return t("the graphics card ran out of video memory for the headset view. Lower the resolution scale "
+                 "in the WiVRn app on the headset (try 70%) and close other GPU-heavy apps",
+                 "your graphics card ran out of VRAM for the headset view. Turn the resolution scale down "
+                 "in the WiVRn app on the headset (70% is a good start) and close other GPU-hungry stuff")
+    return t("the OpenXR runtime couldn't create the headset view. Try a lower resolution scale on the headset",
+             "the runtime couldn't build the headset view. Try a lower resolution scale on the headset")
+
+
 _LOG_PROBLEMS = [
-    (re.compile(r"XR_ERROR_RUNTIME_(UNAVAILABLE|FAILURE)|xrCreateInstance failed"),
+    (re.compile(r"XR_ERROR_\w+ in xrCreateSwapchain"), _swapchain_problem),
+    (re.compile(r"XR_ERROR_RUNTIME_UNAVAILABLE|xrCreateInstance failed"),
      lambda m: t("the game couldn't reach the OpenXR runtime", "the game couldn't find the OpenXR runtime")),
+    (re.compile(r"XR_ERROR_RUNTIME_FAILURE in (xr\w+)"),
+     lambda m: t(f"the OpenXR runtime failed in {m.group(1)}", f"the runtime choked on {m.group(1)}")),
     (re.compile(r"VRInitError_\w+|HmdNotFound"),
      lambda m: t("OpenVR found no headset", "OpenVR looked for a headset and found nothing")),
     (re.compile(r"err:module:import_dll (?:Library|Loading library) (\S+)"),
@@ -203,12 +227,8 @@ def meta_check_failed(game):
 
 
 def log_problem(path):
-    try:
-        with open(path, "rb") as f:
-            f.seek(0, os.SEEK_END)
-            f.seek(max(0, f.tell() - (1 << 20)))
-            text = f.read().decode("utf-8", "replace")
-    except OSError:
+    text = _tail(path)
+    if text is None:
         return None
     for pattern, describe in _LOG_PROBLEMS:
         m = pattern.search(text)

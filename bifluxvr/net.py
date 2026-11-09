@@ -2,6 +2,7 @@ import json
 import os
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -15,6 +16,19 @@ def get_json(url, timeout=15, headers=None):
     req = urllib.request.Request(url, headers={**UA, **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.load(r)
+
+
+def post_json(url, body, timeout=15):
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST",
+                                 headers={**UA, "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.load(e)
+        except ValueError:
+            return e.code, {}
 
 
 def github(path, timeout=20):

@@ -6,7 +6,8 @@ from html import escape
 
 from gi.repository import Adw, Gio, GLib, Gtk
 
-from . import compat, config, installer, meta
+from . import compat, config, installer, meta, riftlift
+from .riftliftpage import RiftLiftSection
 from .voice import t
 from .widgets import button, label, run_async
 
@@ -19,13 +20,16 @@ BADGES = {
 
 
 def explain(kind, gb):
+    if kind in (meta.DRM, meta.OCULUS) and riftlift.installed():
+        return t(f"Needs the Meta platform or the Rift SDK: play it through RiftLift below · {gb:.1f} GB",
+                 f"Needs Meta's own bits. RiftLift below can run it · {gb:.1f} GB")
     return {
         meta.OPENXR: t(f"Uses OpenXR, so it can talk to WiVRn · {gb:.1f} GB",
                        f"Speaks OpenXR, so WiVRn can take it from here · {gb:.1f} GB"),
-        meta.DRM: t(f"Checks ownership through the Meta app, which can't run on Linux. It probably won't start · {gb:.1f} GB",
-                    f"Asks the Meta app if you own it, and that app doesn't do Linux. Probably won't start · {gb:.1f} GB"),
-        meta.OCULUS: t(f"Built on Meta's old Rift SDK. Nothing on Linux can run that yet · {gb:.1f} GB",
-                       f"Uses Meta's old Rift SDK, and Linux has nothing that speaks it · {gb:.1f} GB"),
+        meta.DRM: t(f"Checks ownership through the Meta platform. Install RiftLift below to run it · {gb:.1f} GB",
+                    f"Asks the Meta app if you own it. RiftLift below can answer that · {gb:.1f} GB"),
+        meta.OCULUS: t(f"Built on Meta's old Rift SDK. Install RiftLift below to run it · {gb:.1f} GB",
+                       f"Uses Meta's old Rift SDK. RiftLift below speaks it · {gb:.1f} GB"),
         meta.UNKNOWN: t(f"No VR runtime found in its files. Might be a flat game · {gb:.1f} GB",
                         f"Couldn't spot any VR bits in it. Maybe it's flat? · {gb:.1f} GB"),
     }[kind]
@@ -54,6 +58,7 @@ class MetaPage(Adw.PreferencesPage):
                                             tooltip=t("Check again", "Look again")))
         self.add(self.games)
         self.rows = {"account": [], "games": []}
+        self.rift = RiftLiftSection(win, self)
 
     def shown(self):
         if not self.loaded:
@@ -68,6 +73,7 @@ class MetaPage(Adw.PreferencesPage):
 
     def refresh(self):
         self.loaded = True
+        self.rift.refresh()
         signed_in = bool(meta.token())
         row = Adw.ActionRow(title=t("Signed in to Meta", "Signed in to Meta") if signed_in else
                             t("Not signed in", "Not signed in"))

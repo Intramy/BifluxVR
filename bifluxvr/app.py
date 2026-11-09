@@ -1,3 +1,5 @@
+import ctypes
+import glob
 import os
 import shutil
 import sys
@@ -11,8 +13,8 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
-from . import (__version__, anticheat, audio, compat, config, donate, health, launcher, mods, openvr,
-               runtimes, selfupdate, sessions, steam, uninstall, updates)
+from . import (__version__, anticheat, audio, compat, config, donate, donors, health, launcher, mods, openvr, perks,
+               runtimes, selfupdate, sessions, steam, storage, tripwire, uninstall, updates, winter)
 from .metapage import MetaPage
 from .pages import HeadsetPage, StatsPage, data_paths
 from .panels import (ControlsGroup, HealthGroup, ModsGroup, UpdateGroup, perf_row, protondb_row,
@@ -156,7 +158,36 @@ class OverviewPage(Gtk.Box):
         self.attention.set_visible(False)
         body.append(self.attention_title)
         body.append(self.attention)
+        self.banner = Adw.Banner(revealed=False, button_style=Adw.BannerButtonStyle.SUGGESTED)
+        self.banner.connect("button-clicked", lambda *_: self._banner_clicked())
+        self.append(self.banner)
         self.append(scrolled(body))
+        self.show_update()
+
+    def show_update(self):
+        rel, state = selfupdate.found, selfupdate.state
+        if state == "installed" and rel:
+            self.banner.set_title(t(f"BifluxVR {rel['version']} is installed. Restart to start using it.",
+                                    f"BifluxVR {rel['version']} is in. Restart to use it."))
+            self.banner.set_button_label(t("Restart", "Restart"))
+        elif rel and selfupdate.newer(rel["version"]):
+            self.banner.set_title(t(f"A new BifluxVR update is available: {rel['version']}",
+                                    f"Fresh BifluxVR just dropped: {rel['version']}"))
+            self.banner.set_button_label(t("Update", "Get It"))
+        else:
+            self.banner.set_revealed(False)
+            return
+        self.banner.set_revealed(not self.win.frozen)
+
+    def _banner_clicked(self):
+        if selfupdate.state == "installed":
+            self.win.get_application().restart()
+            return
+        self.win.navigate("system")
+        group = getattr(self.win.system, "updates", None)
+        if group and selfupdate.found:
+            self.banner.set_revealed(False)
+            group.install()
 
     def _tile(self, step, icon, title, value, caption, state):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -728,6 +759,7 @@ class GameDetail(Adw.NavigationPage):
     def __init__(self, win, game):
         super().__init__(title=game.name)
         self.win, self.game = win, game
+        self.moving = None
         tv = Adw.ToolbarView()
         tv.add_top_bar(Adw.HeaderBar())
         is_app = game.kind == "app"
@@ -828,9 +860,13 @@ class GameDetail(Adw.NavigationPage):
             when = t(f" · last played {ago(game.last_played)}", f" · last seen {ago(game.last_played)}") \
                 if game.last_played else ""
             info.add(Adw.ActionRow(title=t("Play time", "Time sunk"), subtitle=played + when))
-        loc = Adw.ActionRow(title=t("Location", "Location"), subtitle=game.exe if game.custom else game.install_dir)
+        loc = Adw.ActionRow(title=t("Location", "Location"), subtitle=escape(game.exe if game.custom else game.install_dir))
         loc.set_subtitle_selectable(True)
+        self.loc_row = loc
         info.add(loc)
+        store = self._storage_row()
+        if store:
+            info.add(store)
         info.add(self._folder_row())
         if game.custom:
             kind_row = Adw.ActionRow(title=t("Type", "Type"))
@@ -870,6 +906,105 @@ class GameDetail(Adw.NavigationPage):
             if game.buildid:
                 info.add(Adw.ActionRow(title=t("Build", "Build number"), subtitle=game.buildid))
         return info
+
+    def _storage_row(self):
+        if not self.game.custom:
+            return None
+        self.drives = storage.drives()
+        if len(self.drives) < 2 or not storage.game_root(self.game, self.win.cfg):
+            return None
+        self.store_row = Adw.ActionRow(title=t("Storage", "Lives on"))
+        self.move_btn = Gtk.Button(valign=Gtk.Align.CENTER)
+        self.move_btn.connect("clicked", lambda *_: self.cancel_move() if self.moving else self.ask_move())
+        self.store_row.add_suffix(self.move_btn)
+        self._storage_sync()
+        return self.store_row
+
+    def _storage_sync(self):
+        root = storage.game_root(self.game, self.win.cfg)
+        here = storage.drive_of(root, self.drives)
+        self.move_targets = [d for d in self.drives if d is not here]
+        where = t(f"On the {here.label}", f"Chilling on the {here.label}") if here else t("Unknown drive", "No idea which drive")
+        self.store_row.set_subtitle(where)
+        self.move_btn.remove_css_class("destructive-action")
+        self.move_btn.set_label(t(f"Move to {self.move_targets[0].label}", f"Move to {self.move_targets[0].label}")
+                                if len(self.move_targets) == 1 else t("Move…", "Move…"))
+        run_async(lambda: storage.size_of(root),
+                  lambda n: not self.moving and self.store_row.set_subtitle(f"{where} · {storage.human(n)}"))
+
+    def ask_move(self):
+        if launcher.running(self.game):
+            self.win.toast(t(f"Close {self.game.name} before moving it", f"Close {self.game.name} first, it's busy"))
+            return
+        alert = Adw.AlertDialog(
+            heading=t(f"Move {self.game.name}?", f"Move {self.game.name}?"),
+            body=t("SSDs load games faster, HDDs have more room. The files are copied over, then removed from "
+                   "where they were. Big games take a while.",
+                   "SSDs load faster, HDDs hoard more. Files get copied over and then deleted from the old spot. "
+                   "Big games take a while, go get a snack."))
+        alert.add_response("cancel", t("Cancel", "Nah"))
+        for i, d in enumerate(self.move_targets):
+            alert.add_response(str(i), t(f"Move to {d.label} ({storage.human(d.free)} free)",
+                                         f"Move to {d.label} ({storage.human(d.free)} free)"))
+        alert.set_response_appearance("0", Adw.ResponseAppearance.SUGGESTED)
+        alert.set_close_response("cancel")
+
+        def on_response(_a, resp):
+            if resp != "cancel":
+                self.start_move(self.move_targets[int(resp)])
+        alert.connect("response", on_response)
+        alert.present(self.win)
+
+    def start_move(self, drive):
+        self.moving = {"cancel": False}
+        job = self.moving
+        self.play_btn.set_sensitive(False)
+        self.move_btn.set_label(t("Cancel", "Abort"))
+        self.move_btn.add_css_class("destructive-action")
+        going = t(f"Moving to the {drive.label}", f"Hauling it to the {drive.label}")
+        self.store_row.set_subtitle(f"{going}…")
+        last = [-1]
+
+        def progress(frac):
+            pct = int(frac * 100)
+            if pct != last[0]:
+                last[0] = pct
+                GLib.idle_add(lambda: self.moving is job and self.store_row.set_subtitle(f"{going}… {pct}%") and False)
+
+        def done(_paths):
+            self._move_ended()
+            config.save(self.win.cfg)
+            gid = self.game.appid.split(":", 1)[1]
+            entry = next((c for c in self.win.cfg["custom_games"] if c["id"] == gid), {})
+            g = self.game
+            g.exe = entry.get("exe", g.exe)
+            g.install_dir = os.path.dirname(g.exe)
+            g.root = entry.get("root", g.root)
+            g.prefix = entry.get("prefix") or g.prefix
+            self.loc_row.set_subtitle(escape(g.exe))
+            self._storage_sync()
+            self.win.library.reload()
+            self.win.toast(t(f"{g.name} is on the {drive.label} now", f"{g.name} moved into the {drive.label}"))
+
+        def fail(e):
+            self._move_ended()
+            self._storage_sync()
+            if isinstance(e, storage.MoveError) and str(e) == "cancelled":
+                self.win.toast(t("Move cancelled, nothing changed", "Move cancelled, nothing changed"))
+            else:
+                self.win.toast(t(f"Couldn't move {self.game.name}: {e}", f"Couldn't move {self.game.name}: {e}"))
+
+        run_async(lambda: storage.move(self.game, self.win.cfg, drive, progress, lambda: job["cancel"]), done, fail)
+
+    def cancel_move(self):
+        if self.moving:
+            self.moving["cancel"] = True
+            self.move_btn.set_sensitive(False)
+
+    def _move_ended(self):
+        self.moving = None
+        self.move_btn.set_sensitive(True)
+        self.play_btn.set_sensitive(True)
 
     def _folder_row(self):
         win, game = self.win, self.game
@@ -988,6 +1123,8 @@ class GameDetail(Adw.NavigationPage):
         run_async(work, done, lambda e: self.win.toast(str(e)))
 
     def play(self):
+        if self.moving:
+            return
         if self.running:
             self.win.stop(self.game)
         else:
@@ -1124,7 +1261,8 @@ class RuntimePage(DynamicPrefs):
                                 "Valve's runtime. Heavier, adds latency")}.get(rt.kind, rt.manifest)
             if not rt.valid:
                 sub = t("Broken. Runtime library is missing", "Broken. Its library is missing")
-            row = Adw.ActionRow(title=rt.name, subtitle=sub, activatable_widget=check, sensitive=rt.valid)
+            row = Adw.ActionRow(title=escape(rt.name), subtitle=escape(sub), activatable_widget=check,
+                                sensitive=rt.valid)
             row.add_prefix(check)
             if is_active:
                 row.add_suffix(label(t("Active", "Active"), "caption-text"))
@@ -1167,7 +1305,7 @@ class TranslationPage(DynamicPrefs):
             else:
                 first = check
             check.set_active(os.path.realpath(layer.path) == cur)
-            row = Adw.ActionRow(title=layer.title, subtitle=f"{info[layer.kind]}\n{layer.path}",
+            row = Adw.ActionRow(title=escape(layer.title), subtitle=escape(f"{info[layer.kind]}\n{layer.path}"),
                                 activatable_widget=check)
             row.set_subtitle_lines(3)
             row.add_prefix(check)
@@ -1275,6 +1413,17 @@ class SystemPage(DynamicPrefs):
                            lambda *_: self.updating or self.win.set_appearance(self.theme.get_active_name()))
         row.add_suffix(self.theme)
         g.add(row)
+        self.skin_row = Adw.ActionRow(title=t("Style", "Vibe"),
+                                      subtitle=t("Winter adds snow and icy colors", "Winter makes it snow. Indoors."))
+        self.skin_row.add_prefix(Gtk.Image(icon_name="weather-snow-symbolic"))
+        self.skin_box = Gtk.Box(valign=Gtk.Align.CENTER)
+        self.skin_row.add_suffix(self.skin_box)
+        g.add(self.skin_row)
+        self.gold_row = Adw.SwitchRow(title=t("Gold look", "Gold look"))
+        self.gold_row.add_prefix(Gtk.Image(icon_name="starred-symbolic"))
+        self.gold_row.connect("notify::active", lambda r, _p: self.updating or self.win.set_gold(r.get_active()))
+        g.add(self.gold_row)
+        self.sync_skins()
         serious = Adw.SwitchRow(title=t("Serious mode", "Serious mode"),
                                 subtitle=t("Use plain, professional wording. Turn off for the fun version",
                                            "Plain wording instead of the jokes"),
@@ -1345,6 +1494,22 @@ class SystemPage(DynamicPrefs):
         run_async(work, lambda title: title and self.win.toast(t(f"Sound output: {title}",
                                                                  f"Sound now comes out of {title}")))
 
+    def sync_skins(self):
+        clear(self.skin_box)
+        group = Adw.ToggleGroup()
+        choices = [("classic", t("Classic", "Classic")), ("winter", t("Winter", "Winter"))]
+        for name, text in choices:
+            group.add(Adw.Toggle(name=name, label=text))
+        group.set_active_name(self.win.skin())
+        group.connect("notify::active-name", lambda g, _p: g.get_active_name() and self.win.set_skin(g.get_active_name()))
+        self.skin_box.append(group)
+        name = perks.name(self.win.cfg)
+        self.gold_row.set_visible(bool(name))
+        self.gold_row.set_subtitle(escape(t(f"Donator perk for {name}", f"Donator perk, {name}")) if name else "")
+        self.updating = True
+        self.gold_row.set_active(self.win.gold())
+        self.updating = False
+
     def sync_appearance(self):
         self.updating = True
         self.theme.set_active_name(self.win.cfg.get("appearance", "system"))
@@ -1367,7 +1532,7 @@ class SystemPage(DynamicPrefs):
             (t("Logs", "Logs"), LOG_DIR),
             *data_paths(),
         ):
-            row = Adw.ActionRow(title=title, subtitle=path, activatable=True)
+            row = Adw.ActionRow(title=title, subtitle=escape(path), activatable=True)
             row.set_subtitle_selectable(True)
             row.add_suffix(Gtk.Image(icon_name="folder-open-symbolic"))
             row.connect("activated", lambda *_a, p=path: self.win.open_path(
@@ -1387,7 +1552,7 @@ class DonatePage(Gtk.Box):
                             "BifluxVR is free. intramy still has to eat."), "page-subtitle", wrap=True))
         body.append(self._goal_card())
         flow = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True,
-                           min_children_per_line=1, max_children_per_line=3,
+                           min_children_per_line=1, max_children_per_line=4,
                            column_spacing=16, row_spacing=16, margin_top=12)
         for tier in donate.TIERS:
             child = Gtk.FlowBoxChild(child=self._card(*tier), focusable=False)
@@ -1395,6 +1560,7 @@ class DonatePage(Gtk.Box):
             flow.append(child)
         body.append(flow)
         body.append(self._custom_card(*donate.CUSTOM))
+        body.append(self._hall())
         note = label(t("Payments open in your browser and are handled by the payment provider. "
                        "BifluxVR never sees your card details.",
                        "Payment happens in your browser. BifluxVR never sees your card."), "caption-text", wrap=True, xalign=0.5)
@@ -1418,6 +1584,103 @@ class DonatePage(Gtk.Box):
         show(0, donate.GOAL)
         threading.Thread(target=lambda: GLib.idle_add(show, *donate.funding()), daemon=True).start()
         return box
+
+    def _hall(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin_top=22)
+        box.append(label(t("Donators", "Hall of Legends"), "section-title"))
+        box.append(label(t("Everyone who chipped in, by total. Donated? Open a ticket in the Discord with your payment "
+                           "note. You get the Donator role, then set your name and picture with /donor.",
+                           "The people keeping intramy alive, biggest total first. Donated? Open a ticket in the "
+                           "Discord with your payment note, grab the Donator role, then pick your name and picture "
+                           "with /donor."), "caption-text", wrap=True))
+        self.hall = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True, min_children_per_line=1,
+                                max_children_per_line=3, column_spacing=12, row_spacing=12, margin_top=4)
+        box.append(self.hall)
+        self.hall_empty = label(t("Loading…", "Counting the legends…"), "caption-text")
+        box.append(self.hall_empty)
+
+        perks = Adw.PreferencesGroup(title=t("Donator perks", "Donator perks"), margin_top=10)
+        self.perk_row = Adw.ActionRow(title=t("Donator code", "Donator code"))
+        self.code = Gtk.Entry(placeholder_text="BFX-XXXX-XXXX-XXXX-XXXX", valign=Gtk.Align.CENTER, width_chars=24)
+        self.code.connect("activate", lambda *_: self.claim())
+        claim = Gtk.Button(label=t("Unlock", "Unlock"), valign=Gtk.Align.CENTER)
+        claim.add_css_class("suggested-action")
+        claim.connect("clicked", lambda *_: self.claim())
+        self.perk_row.add_suffix(self.code)
+        self.perk_row.add_suffix(claim)
+        self.claim_btn = claim
+        perks.add(self.perk_row)
+        box.append(perks)
+        self.data = {"donors": []}
+        self.sync_perks()
+        run_async(lambda: donors.load(), self._show_hall)
+        return box
+
+    def _show_hall(self, data):
+        self.data = data
+        clear(self.hall)
+        self.hall_empty.set_visible(not data["donors"])
+        self.hall_empty.set_label(t("Nobody yet. Be the first.", "Empty. Somebody has to be first."))
+        for i, d in enumerate(data["donors"][:60]):
+            card = Gtk.Box(spacing=12)
+            card.add_css_class("donor-card")
+            if i == 0:
+                card.add_css_class("top")
+            pic = Adw.Avatar(size=44, text=d["name"], show_initials=True)
+            card.append(pic)
+            text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1, hexpand=True, valign=Gtk.Align.CENTER)
+            text.append(label(d["name"], "donor-name", ellipsize=True))
+            times = t(f"{d['count']} donation" + ("s" if d["count"] != 1 else ""),
+                      f"{d['count']} time" + ("s" if d["count"] != 1 else ""))
+            text.append(label(times, "caption-text"))
+            card.append(text)
+            right = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, valign=Gtk.Align.CENTER)
+            right.append(label(donors.euros(d["total"]), "donor-total", xalign=1))
+            right.append(label(f"#{i + 1}", "donor-rank", xalign=1))
+            card.append(right)
+            child = Gtk.FlowBoxChild(child=card, focusable=False)
+            self.hall.append(child)
+            if d["avatar"]:
+                run_async(lambda d=d: donors.avatar(d) and Gdk.Texture.new_from_filename(donors.avatar(d)),
+                          lambda tex, pic=pic: tex and pic.set_custom_image(tex))
+
+    def sync_perks(self):
+        name = perks.name(self.win.cfg)
+        if name:
+            self.perk_row.set_subtitle(escape(t(f"Unlocked for {name} on this computer. Turn the Gold look on or off "
+                                                "in Settings. Thank you!",
+                                                f"Unlocked for {name} on this computer. Gold look toggle lives in "
+                                                "Settings. Legend.")))
+        else:
+            self.perk_row.set_subtitle(t("Donators get a code from the bot with /donor perks. One code, one computer",
+                                         "Donators get a code from the bot with /donor perks. One code, one PC"))
+        self.code.set_visible(not name)
+        self.claim_btn.set_visible(not name)
+
+    def claim(self):
+        code = self.code.get_text().strip()
+        if not code:
+            return
+        self.claim_btn.set_sensitive(False)
+        why = {"unknown": t("That code doesn't exist", "Nope, that code isn't real"),
+               "used": t("That code is already used on another computer. Run /donor perks new:True in Discord "
+                         "for a fresh one", "Already used on another PC. /donor perks new:True gets you a new one"),
+               "slow": t("Too many tries. Wait an hour", "Too many tries. Chill for an hour"),
+               "server": t("The donator server didn't answer. Try again later", "Server's napping. Try later")}
+
+        def done(token):
+            self.claim_btn.set_sensitive(True)
+            perks.grant(self.win.cfg, token)
+            config.save(self.win.cfg)
+            self.code.set_text("")
+            self.win.sync_donor()
+            name = perks.name(self.win.cfg)
+            self.win.toast(t(f"Perks unlocked. Thanks, {name}!", f"Perks unlocked. You're a legend, {name}."))
+
+        def failed(e):
+            self.claim_btn.set_sensitive(True)
+            self.win.toast(why.get(str(e), why["server"]) if isinstance(e, perks.PerksError) else why["server"])
+        run_async(lambda: perks.redeem(code), done, failed)
 
     def _card(self, tid, emoji, title, blurb, price):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
@@ -1510,12 +1773,21 @@ def pages():
     ]
 
 
+def nice_try_screen():
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True, vexpand=True)
+    box.add_css_class("nice-try")
+    box.append(Gtk.Label(label="Nice try!", css_classes=["nice-try-text"], valign=Gtk.Align.CENTER, vexpand=True))
+    return box
+
+
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title="BifluxVR", default_width=1180, default_height=780)
         self.add_css_class("bifluxvr")
         self.set_size_request(380, 500)
         self.cfg = config.load()
+        self.frozen = False
+        tripwire.on_trip(lambda: GLib.idle_add(self.nice_try))
         voice.set_serious(self.cfg.get("serious_mode", False))
         self.state = None
         self._sig = None
@@ -1524,7 +1796,10 @@ class MainWindow(Adw.ApplicationWindow):
         self.toasts = Adw.ToastOverlay()
         self.split = Adw.NavigationSplitView(min_sidebar_width=220, max_sidebar_width=260)
         self.toasts.set_child(self.split)
-        self.set_content(self.toasts)
+        stage = Gtk.Overlay(child=self.toasts)
+        self.snow = winter.Snowfall(self)
+        stage.add_overlay(self.snow)
+        self.set_content(stage)
 
         side = Adw.ToolbarView()
         sh = Adw.HeaderBar()
@@ -1588,6 +1863,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.discord_btn.set_margin_bottom(10)
         sbox.append(self.discord_btn)
         GLib.timeout_add_seconds(9, self._shine)
+        self.donor_badge = label("", "donor-badge", xalign=0.5, ellipsize=True)
+        self.donor_badge.set_visible(False)
+        sbox.append(self.donor_badge)
         credit = label("Made by intramy", "caption-text", xalign=0.5)
         credit.set_margin_bottom(12)
         sbox.append(credit)
@@ -1605,6 +1883,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.headset = HeadsetPage(self)
         self.stats = StatsPage(self)
         self.meta = MetaPage(self)
+        self.sync_donor()
         for name, widget, wrap in (
             ("overview", self.overview, True),
             ("library", self.library, False),
@@ -1639,6 +1918,9 @@ class MainWindow(Adw.ApplicationWindow):
             GLib.idle_add(self._welcome)
         GLib.timeout_add_seconds(5, lambda: (self._check_updates(), False)[1])
         self._notice_id = GLib.timeout_add_seconds(1800, self._check_updates)
+        GLib.timeout_add_seconds(30, self._guard)
+        GLib.timeout_add_seconds(8, lambda: (self.sync_perks_online(), False)[1])
+        GLib.timeout_add_seconds(6 * 3600, lambda: (self.sync_perks_online(), True)[1])
         self.connect("close-request", self._close_request)
 
     def _close_request(self, _win):
@@ -1714,6 +1996,8 @@ class MainWindow(Adw.ApplicationWindow):
 
 
     def _tick(self):
+        if self.frozen:
+            return True
         if self.is_visible():
             self.refresh()
             self._sync_running()
@@ -1728,14 +2012,17 @@ class MainWindow(Adw.ApplicationWindow):
 
 
     def _check_updates(self):
+        if self.frozen:
+            return True
         if not self.cfg.get("notify", True):
+            if selfupdate.enabled():
+                run_async(selfupdate.check, lambda _: self._update_found(), lambda _e: None)
             return True
         games = [(g.appid, g.name) for g in self.library.games]
 
         def done(new):
             self._show_notices()
-            if hasattr(self.system, "updates"):
-                self.system.updates.show()
+            self._update_found()
             app = self.get_application()
             for item in new[:3]:
                 note = Gio.Notification.new(item["title"])
@@ -1743,6 +2030,12 @@ class MainWindow(Adw.ApplicationWindow):
                 app.send_notification(item["id"], note)
         run_async(lambda: updates.check(games), done)
         return True
+
+    def _update_found(self):
+        if hasattr(self.system, "updates"):
+            self.system.updates.show()
+        else:
+            self.overview.show_update()
 
     def _show_notices(self):
         clear(self.bell_list)
@@ -1896,6 +2189,107 @@ class MainWindow(Adw.ApplicationWindow):
         }.get(mode, Adw.ColorScheme.DEFAULT))
         self._sync_theme_button()
 
+    def skin(self):
+        skin = self.cfg.get("skin", "classic")
+        return skin if skin in winter.SKINS else "classic"
+
+    def set_skin(self, skin):
+        if skin not in winter.SKINS:
+            tripwire.trip("skin")
+            return
+        self.set_cfg("skin", skin)
+        self.apply_look()
+
+    def gold(self):
+        return perks.gold(self.cfg)
+
+    def set_gold(self, on):
+        if on and not perks.current(self.cfg):
+            tripwire.trip("gold")
+            return
+        self.set_cfg("gold_look", bool(on))
+        self.apply_look()
+
+    def apply_look(self):
+        if tripwire.check(self.cfg):
+            winter.apply(self, self.skin(), self.gold())
+
+    def sync_donor(self):
+        name = perks.name(self.cfg)
+        self.donor_badge.set_label(t(f"★ Donator · {name}", f"★ Legend · {name}"))
+        self.donor_badge.set_visible(bool(name))
+        self.apply_look()
+        if hasattr(self, "system"):
+            self.system.sync_skins()
+        if hasattr(self, "donate"):
+            self.donate.sync_perks()
+
+    def _guard(self):
+        if self.frozen:
+            return False
+        tripwire.check(self.cfg)
+        return True
+
+    def sync_perks_online(self):
+        if self.frozen or not self.cfg.get("online", True):
+            return
+        cfg = dict(self.cfg)
+
+        def work():
+            if cfg.get("perks_legacy") and not cfg.get("perks_token"):
+                try:
+                    return "token", perks.redeem(cfg["perks_legacy"])
+                except perks.PerksError as e:
+                    return ("forget", None) if str(e) in ("unknown", "used") else None
+                except OSError:
+                    return None
+            try:
+                result = perks.check(cfg)
+            except (OSError, ValueError):
+                return None
+            if result == "revoked":
+                return "revoked", None
+            if result and result != "ok":
+                return "token", result
+            return None
+
+        def done(result):
+            if not result or self.frozen:
+                return
+            kind, token = result
+            if kind == "token":
+                was = bool(self.cfg.get("perks_token"))
+                if was:
+                    self.cfg["perks_token"] = token
+                else:
+                    perks.grant(self.cfg, token)
+            elif kind == "forget":
+                self.cfg.pop("perks_legacy", None)
+            else:
+                perks.drop(self.cfg)
+                self.toast(t("Your donator perks were removed", "Your donator perks are gone"))
+            config.save(self.cfg)
+            self.sync_donor()
+        run_async(work, done)
+
+    def nice_try(self):
+        if self.frozen:
+            return False
+        self.frozen = True
+        self.snow.set_running(False)
+        dialog = self.get_visible_dialog()
+        if dialog:
+            dialog.force_close()
+        app = self.get_application()
+        if app:
+            for name in ("about", "refresh", "search"):
+                app.remove_action(name)
+            for w in app.get_windows():
+                if w is not self:
+                    w.destroy()
+        self.set_content(nice_try_screen())
+        return False
+
     def set_appearance(self, mode):
         self.set_cfg("appearance", mode)
         self.apply_appearance(mode)
@@ -2019,6 +2413,8 @@ class MainWindow(Adw.ApplicationWindow):
                       "\n\nSteam shows its own confirmation next. Saves in Steam Cloud stay on Steam's servers.")
         if plan.paths:
             body += "\n\n" + "\n".join(f"<tt>{escape(p)}</tt>" for p in plan.paths)
+        if plan.riftlift:
+            body += t("\n\nRiftLift removes the files it downloaded.", "\n\nRiftLift cleans up what it downloaded.")
         if plan.shared:
             body += t(f"\n\n<tt>{escape(plan.shared)}</tt> holds other things too, so it stays. Delete the {what}'s files there yourself.",
                       f"\n\n<tt>{escape(plan.shared)}</tt> holds other things too, so it stays. Delete the {what}'s files there yourself.")
@@ -2152,6 +2548,7 @@ class BifluxVRApp(Adw.Application):
         self.quit()
 
     def do_startup(self):
+        load_fonts()
         Adw.Application.do_startup(self)
         css = Gtk.CssProvider()
         css.load_from_path(os.path.join(HERE, "style.css"))
@@ -2179,6 +2576,13 @@ class BifluxVRApp(Adw.Application):
         win.library.focus_search()
 
     def do_activate(self):
+        if not self.props.active_window and not tripwire.check(config.load()):
+            for name in ("about", "refresh", "search"):
+                self.remove_action(name)
+            win = Adw.ApplicationWindow(application=self, title="BifluxVR", default_width=1000, default_height=700,
+                                        content=nice_try_screen())
+            win.present()
+            return
         win = self.props.active_window or MainWindow(self)
         size = os.environ.get("BIFLUXVR_SIZE")
         if size:
@@ -2238,13 +2642,27 @@ class BifluxVRApp(Adw.Application):
             "BSManager (Zagrios) https://github.com/Zagrios/bs-manager",
             "OculusGraphQLApiLib (ComputerElite) https://github.com/ComputerElite/OculusGraphQLApiLib",
         ])
+        about.add_credit_section(t("Rift games", "Rift games run by"), [
+            "RiftLift (Villagers654) https://github.com/Villagers654/RiftLift",
+        ])
         about.add_credit_section(t("App icon", "App icon"), ["Based on Tux by Larry Ewing, created with The GIMP"])
+        about.add_credit_section(t("Font", "Font"), ["Outfit (SIL Open Font License) https://github.com/Outfitio/Outfit-Fonts"])
         about.add_credit_section(t("Compatibility data", "Compatibility data"), [
             "AreWeAntiCheatYet https://areweanticheatyet.com",
             "BeatMods https://beatmods.com",
             "ProtonDB https://www.protondb.com",
         ])
         about.present(self._win())
+
+
+def load_fonts():
+    try:
+        fc = ctypes.CDLL("libfontconfig.so.1")
+    except OSError:
+        return
+    fc.FcConfigAppFontAddFile.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    for path in glob.glob(os.path.join(HERE, "fonts", "*.ttf")):
+        fc.FcConfigAppFontAddFile(None, path.encode())
 
 
 def main():

@@ -4,6 +4,15 @@ SRC=$(cd "$(dirname "$0")" && pwd)
 DATA=${XDG_DATA_HOME:-$HOME/.local/share}
 BIN=$HOME/.local/bin
 APP=$DATA/bifluxvr/app
+CONF=${XDG_CONFIG_HOME:-$HOME/.config}/bifluxvr
+LOCKS="$DATA/bifluxvr/.nicetry $CONF/.nicetry"
+
+locked() {
+    for lock in $LOCKS; do
+        [ -e "$lock" ] && return 0
+    done
+    return 1
+}
 
 case "$(uname -s)" in
     Linux) ;;
@@ -20,6 +29,9 @@ if [ "${1:-}" = "--uninstall" ]; then
         "$DATA/icons/hicolor/scalable/apps/io.github.intramy.BifluxVR.svg" \
         "$DATA/applications/io.github.bifluxvr.BifluxVR.desktop" \
         "$DATA/icons/hicolor/scalable/apps/io.github.bifluxvr.BifluxVR.svg"
+    for lock in $LOCKS; do
+        rm -f "$lock"
+    done
     echo "BifluxVR removed. Settings in ~/.config/bifluxvr were kept."
     exit 0
 fi
@@ -57,6 +69,15 @@ install_toolkit() {
     return 1
 }
 
+if locked; then
+    if [ "${1:-}" != "--files-only" ] && [ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ] && have_toolkit; then
+        cd "$SRC" && exec python3 -m wizard
+    fi
+    printf '\033[1;97;41m  Nice try!  \033[0m\n' >&2
+    echo "This BifluxVR was tampered with. To use it again, remove it completely first: sh install.sh --uninstall" >&2
+    exit 1
+fi
+
 if [ "${1:-}" != "--files-only" ]; then
     if [ -z "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
         echo "No graphical session found, so only BifluxVR itself is installed."
@@ -77,6 +98,11 @@ mkdir -p "$APP" "$BIN" "$DATA/applications" "$DATA/icons/hicolor/scalable/apps"
 rm -rf "$APP/bifluxvr"
 cp -r "$SRC/bifluxvr" "$APP/"
 find "$APP" -name __pycache__ -prune -exec rm -rf {} +
+rm -f "$APP/bifluxvr/.manifest" "$APP/bifluxvr/.manifest.tmp"
+(cd "$APP/bifluxvr" && find . -name '*.py' | LC_ALL=C sort | sed 's|^\./||' | while IFS= read -r f; do
+    sha256sum "$f"
+done) > "$APP/bifluxvr/.manifest.tmp"
+mv "$APP/bifluxvr/.manifest.tmp" "$APP/bifluxvr/.manifest"
 cat > "$BIN/bifluxvr" <<SH
 #!/bin/sh
 exec python3 -c 'import sys; sys.path.insert(0, "$APP"); from bifluxvr.app import main; sys.exit(main())' "\$@"

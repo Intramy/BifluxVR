@@ -1,7 +1,6 @@
 /* UI */
 window.bifluxvr {
-  font-family: "Inter Variable", "Inter", "SF Pro Display", "SF Pro Text", "Cantarell", sans-serif;
-  font-feature-settings: "cv11", "ss01";
+  font-family: "Outfit", "Inter Variable", "Inter", "Cantarell", sans-serif;
 }
 
 .large-title {
@@ -322,6 +321,12 @@ button.pill.donate {
 .tier-energy button.donate   { background: #1f9d55; }
 .tier-energy button.donate:hover { background: #25ad5f; }
 
+.tier-snus .donate-emoji   { background: alpha(#0fb5ae, 0.15); }
+.tier-snus .donate-amount  { color: #0c9a94; }
+.tier-snus scale highlight { background: #0fb5ae; }
+.tier-snus button.donate   { background: #0c9a94; }
+.tier-snus button.donate:hover { background: #10aaa3; }
+
 .tier-lunch .donate-emoji   { background: alpha(#bf5af2, 0.15); }
 .tier-lunch .donate-amount  { color: #9b51e0; }
 .tier-lunch scale highlight { background: #bf5af2; }
@@ -418,3 +423,166 @@ button.uninstall:hover { background: alpha(var(--destructive-color), 0.12); }
 .queue-item { padding: 12px 14px; }
 .queue-name { font-weight: 600; font-size: 15px; }
 row.failed .caption-text { color: var(--error-color); opacity: 1; }
+
+.donor-card {
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--card-bg-color);
+  box-shadow: 0 1px 2px alpha(black, 0.06), 0 0 0 1px alpha(black, 0.05);
+}
+.donor-card.top { box-shadow: 0 0 0 2px alpha(#e6b422, 0.7), 0 8px 22px -10px alpha(#e6b422, 0.6); }
+.donor-name { font-weight: 700; font-size: 15px; }
+.donor-total { font-weight: 800; font-size: 18px; color: #c99a06; }
+.donor-rank { font-weight: 800; font-size: 12px; opacity: 0.5; }
+.donor-badge {
+  margin: 0 12px 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 12px;
+  color: #5b4300;
+  background-image: linear-gradient(135deg, #ffe08a, #e6b422);
+}
+
+window.bifluxvr.skin-winter {
+  --accent-bg-color: #2f9be0;
+  --accent-color: #1f7fc0;
+  --window-bg-color: #eef5fb;
+  --view-bg-color: #f6faff;
+  --sidebar-bg-color: #e2eef9;
+  --headerbar-bg-color: #e8f2fb;
+  --card-bg-color: #fbfdff;
+  --popover-bg-color: #f6faff;
+  --dialog-bg-color: #f6faff;
+}
+window.bifluxvr.skin-winter.is-dark {
+  --accent-bg-color: #3aa8e8;
+  --accent-color: #7cc8f5;
+  --window-bg-color: #0f1a26;
+  --view-bg-color: #122131;
+  --sidebar-bg-color: #0b1520;
+  --headerbar-bg-color: #0f1b28;
+  --card-bg-color: #182a3d;
+  --popover-bg-color: #16283a;
+  --dialog-bg-color: #16283a;
+}
+window.bifluxvr.skin-winter button.pill,
+window.bifluxvr.skin-winter button.suggested-action,
+window.bifluxvr.skin-winter button.destructive-action,
+window.bifluxvr.skin-winter .linked button,
+window.bifluxvr.skin-winter row button:not(.flat):not(.circular):not(.image-button) {
+  background-image: url("snowcap.svg");
+  background-repeat: no-repeat;
+  background-position: top;
+  background-size: 100% 8px;
+  background-origin: border-box;
+  background-clip: border-box;
+}
+window.bifluxvr.skin-winter list.boxed-list {
+  background-image: url("snowcap-wide.svg");
+  background-repeat: no-repeat;
+  background-position: top;
+  background-size: 100% 11px;
+}
+window.bifluxvr.skin-winter .tile,
+window.bifluxvr.skin-winter .donate-card,
+window.bifluxvr.skin-winter .donor-card,
+window.bifluxvr.skin-winter .sidebar-status {
+  background-image: url("snowcap.svg");
+  background-repeat: no-repeat;
+  background-position: top;
+  background-size: 100% 11px;
+  background-origin: border-box;
+  background-clip: border-box;
+}
+window.bifluxvr.skin-winter .hero-card {
+  background-image:
+    url("snowcap-wide.svg"),
+    radial-gradient(circle at 85% 15%, alpha(white, 0.35), transparent 45%),
+    linear-gradient(135deg, #5ac8fa 0%, #2f80d1 55%, #6a5ae0 100%);
+  background-size: 100% 16px, auto, auto;
+  background-repeat: no-repeat, no-repeat, no-repeat;
+  background-position: top, center, center;
+  background-origin: border-box;
+  box-shadow: 0 18px 40px -12px alpha(#2f80d1, 0.55);
+}
+window.bifluxvr.skin-winter .hero-card.attention {
+  background-image:
+    url("snowcap-wide.svg"),
+    radial-gradient(circle at 85% 15%, alpha(white, 0.35), transparent 45%),
+    linear-gradient(135deg, #ff9f0a 0%, #ff6b3d 50%, #ff375f 100%);
+}
+window.bifluxvr.skin-winter .hero-card.live {
+  background-image:
+    url("snowcap-wide.svg"),
+    radial-gradient(circle at 85% 15%, alpha(white, 0.35), transparent 45%),
+    linear-gradient(135deg, #30d158 0%, #0fb5ae 50%, #0a84ff 100%);
+}
+window.bifluxvr.skin-winter .navigation-sidebar row:selected {
+  background-image: linear-gradient(90deg, alpha(#7cc8f5, 0.28), alpha(#7cc8f5, 0.08));
+}
+
+window.bifluxvr.skin-gold {
+  --accent-bg-color: #c99a06;
+  --accent-color: #9a7200;
+  --window-bg-color: #fbf7ec;
+  --view-bg-color: #fffcf4;
+  --sidebar-bg-color: #f4ecd6;
+  --headerbar-bg-color: #f7f0dc;
+  --card-bg-color: #fffaf0;
+}
+window.bifluxvr.skin-gold.is-dark {
+  --accent-bg-color: #d4a72c;
+  --accent-color: #f0c650;
+  --window-bg-color: #1b1810;
+  --view-bg-color: #201c12;
+  --sidebar-bg-color: #16130c;
+  --headerbar-bg-color: #1d1911;
+  --card-bg-color: #2a2416;
+}
+window.bifluxvr.skin-gold .hero-card:not(.attention):not(.live) {
+  background-image:
+    radial-gradient(circle at 85% 15%, alpha(white, 0.3), transparent 45%),
+    linear-gradient(135deg, #ffd56b 0%, #e6a817 50%, #b8741a 100%);
+  box-shadow: 0 18px 40px -12px alpha(#e6a817, 0.55);
+}
+window.bifluxvr.skin-gold button.suggested-action {
+  color: #3d2c00;
+  background-image: linear-gradient(135deg, #ffe08a 0%, #e6b422 55%, #c48a12 100%);
+  box-shadow: inset 0 1px alpha(white, 0.45), 0 4px 12px -4px alpha(#c48a12, 0.6);
+}
+window.bifluxvr.skin-gold button.suggested-action:hover {
+  background-image: linear-gradient(135deg, #fff0b8 0%, #f0c240 55%, #d29a1c 100%);
+}
+window.bifluxvr.skin-gold .tile,
+window.bifluxvr.skin-gold .donate-card,
+window.bifluxvr.skin-gold .donor-card,
+window.bifluxvr.skin-gold list.boxed-list {
+  border: 1px solid alpha(#d4a72c, 0.45);
+  box-shadow: 0 6px 18px -10px alpha(#c48a12, 0.55);
+}
+window.bifluxvr.skin-gold .navigation-sidebar row:selected {
+  background-image: linear-gradient(90deg, alpha(#e6b422, 0.32), alpha(#e6b422, 0.06));
+}
+window.bifluxvr.skin-gold .navigation-sidebar row:selected image {
+  color: #c99a06;
+}
+window.bifluxvr.skin-gold .donor-badge {
+  background-image: linear-gradient(110deg, #ffe08a 0%, #e6b422 40%, #fff3c4 50%, #e6b422 60%, #c48a12 100%);
+  box-shadow: 0 0 14px alpha(#e6b422, 0.55);
+}
+window.bifluxvr.skin-gold headerbar .title {
+  color: #b8860b;
+}
+window.bifluxvr.skin-gold.is-dark headerbar .title {
+  color: #f0c650;
+}
+
+.nice-try {
+  background-color: #d10000;
+}
+.nice-try-text {
+  color: white;
+  font-size: 84px;
+  font-weight: 900;
+}
