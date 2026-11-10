@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import threading
 import time
 import urllib.error
@@ -36,8 +37,41 @@ def github(path, timeout=20):
                     {"Accept": "application/vnd.github+json"})
 
 
+def _github_web_latest(repo):
+    req = urllib.request.Request(f"https://github.com/{repo}/releases/latest", headers=UA, method="HEAD")
+    with urllib.request.urlopen(req, timeout=20) as r:
+        final = r.url
+    if "/releases/tag/" not in final:
+        return None
+    tag = urllib.parse.unquote(final.rsplit("/releases/tag/", 1)[1])
+    req = urllib.request.Request(f"https://github.com/{repo}/releases/expanded_assets/{quote(tag)}", headers=UA)
+    with urllib.request.urlopen(req, timeout=20) as r:
+        page = r.read().decode("utf-8", "replace")
+    assets = []
+    for href in dict.fromkeys(re.findall(r'href="(/[^"]+/releases/download/[^"]+)"', page)):
+        assets.append({"name": urllib.parse.unquote(href.rsplit("/", 1)[1]),
+                       "browser_download_url": "https://github.com" + href})
+    return {"tag_name": tag, "html_url": final, "body": "", "assets": assets,
+            "tarball_url": f"https://github.com/{repo}/archive/refs/tags/{quote(tag)}.tar.gz"}
+
+
+_latest = {}
+
+
 def github_latest(repo):
-    return github(f"{repo}/releases/latest")
+    hit = _latest.get(repo)
+    if hit and time.time() - hit[0] < 600:
+        return hit[1]
+    try:
+        rel = github(f"{repo}/releases/latest")
+    except urllib.error.HTTPError as e:
+        if e.code not in (403, 429):
+            raise
+        rel = _github_web_latest(repo)
+        if rel is None:
+            raise
+    _latest[repo] = (time.time(), rel)
+    return rel
 
 
 def github_releases(repo, count=5):

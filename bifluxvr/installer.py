@@ -19,7 +19,8 @@ _VOLUME = re.compile(r"\.part0*(\d+)\.rar$", re.I)
 _NOT_GAME = re.compile(
     r"(unins|setup|install|redist|vc_?redist|dxsetup|directx|dotnet|prereq|crash|report|"
     r"helper|updater|update|uninstall|easyanticheat|eac_|battleye|cleanup|benchmark|"
-    r"config|settings|launcherpatcher|cefprocess|webhelper|7z|unitycrashhandler|ue4prereq)",
+    r"config|settings|launcherpatcher|cefprocess|webhelper|7z|unitycrashhandler|ue4prereq|"
+    r"language|locale|regist|readme|manual|crashpad|activat)",
     re.I,
 )
 

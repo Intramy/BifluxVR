@@ -204,7 +204,7 @@ Run without installing: `python3 -m bifluxvr` from this directory.
 ### Publishing updates
 
 The updater reads GitHub releases. To ship a version, bump `__version__` in `bifluxvr/__init__.py`,
-push, and publish a GitHub release tagged with the same number (`v1.4.0`).
+push, and publish a GitHub release tagged with the same number (`v1.4.2`).
 GitHub's source tarball is what gets installed, so nothing needs uploading.
 
 The expenses bar reads `funding.json` from the `main` branch. Edit and push it
